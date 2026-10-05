@@ -11,9 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unpack 1.10.0 source over repo
+      - name: Unpack newest source zip over repo
         run: |
-          unzip -o auto-lyrics-1.10.0-source.zip -d /tmp/src
+          ZIP=$(ls auto-lyrics-*-source.zip | sort -V | tail -n 1)
+          echo "Using $ZIP"
+          unzip -o "$ZIP" -d /tmp/src
           rsync -a /tmp/src/auto-lyrics/ ./
 
       - uses: actions/setup-java@v4
@@ -30,5 +32,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: auto-lyrics-1.10.0
+          name: auto-lyrics-apk
           path: app/build/outputs/apk/debug/app-debug.apk
