@@ -11,6 +11,7 @@ An Android Auto app that displays synced lyrics for the currently playing song, 
 - **v1.10.1 — compact lyrics page**: on the AA lyrics list the song info is a small section title instead of a full row with album art, and 4 lyric lines are shown (1 previous, current, 2 upcoming). Toggle in settings.
 - **v1.10.2 — messy video titles**: when nothing is found, retries with brackets / "MV" / "動態歌詞" removed and with titles like "薛之謙-天外之物" or "不遺憾 (…) - 李榮浩『…』" split into artist and song name (both orders). Results still have to pass the normal title/artist/duration check.
 - **v1.10.3 — tabs & jump without leaving lyrics**: Android Auto opens on a "Lyrics" tab, "⟳ Sync" is the second tab. Each lyric row has a ▶ button (custom browse action) that jumps to that line without switching to the now-playing screen; on head units without custom browse actions, rows become folders that jump and open the same lyrics page. Settings → "車機點歌詞時": auto / folder mode / original.
+- **v1.10.4 — song name in brackets**: titles like "周杰倫 Jay Chou【告白氣球 Love Confession】Official MV" are retried with the 【】「」『』《》 text as the song name, and mixed Chinese/English names also get a Chinese-only try ("告白氣球 / 周杰倫"). At most 4 extra tries per song.
 - Sources other than LRCLIB use unofficial endpoints and may break at any time.
 
 ## Features

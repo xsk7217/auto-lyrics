@@ -21,26 +21,49 @@ internal object TitleVariants {
             """\bOfficial\s*(?:Music\s*)?(?:Video|Audio|MV)\b|\bLyrics?\s*Video\b|\bLyrics?\b|\bM/?V\b|\bHD\b|\b4K\b""",
         RegexOption.IGNORE_CASE
     )
+    /** Brackets that usually hold the song name in video titles (not plain parentheses). */
+    private val SONG_BRACKETS = Regex("""【([^【】]*)】|「([^「」]*)」|『([^『』]*)』|《([^《》]*)》""")
+    private val LATIN_WORD = Regex("""[A-Za-z][A-Za-z0-9'’.&]*""")
+    private const val MAX_VARIANTS = 4
     private val SEPARATOR = Regex("""\s*[-–—－|｜]\s*""")
     private val SPACES = Regex("""\s{2,}""")
     private val EDGE = Regex("""^[\s\-–—－|｜:：,，·•]+|[\s\-–—－|｜:：,，·•]+$""")
 
     fun of(track: TrackInfo): List<TrackInfo> {
         val cleaned = clean(track.title)
-        val out = LinkedHashSet<TrackInfo>()
+        val guesses = mutableListOf<Pair<String, String>>()   // (title, artist)
         val parts = split(cleaned)
         if (parts != null) {
             val (left, right) = parts
-            out += track.copy(title = right, artist = left)   // "Artist - Title"
-            out += track.copy(title = left, artist = right)   // "Title - Artist"
-        } else if (cleaned.isNotEmpty()) {
-            out += track.copy(title = cleaned)
+            guesses += right to left   // "Artist - Title"
+            guesses += left to right   // "Title - Artist"
+        } else {
+            // "周杰倫 Jay Chou【告白氣球 Love Confession】Official MV": the song name is
+            // in the brackets, the rest is the artist.
+            val outside = strip(track.title).ifBlank { track.artist }
+            for (m in SONG_BRACKETS.findAll(track.title)) {
+                val raw = m.groupValues.drop(1).firstOrNull { it.isNotEmpty() } ?: continue
+                val inner = EDGE.replace(JUNK.replace(raw, " ").replace(SPACES, " ").trim(), "")
+                if (inner.isNotEmpty()) guesses += inner to outside
+            }
+            if (cleaned.isNotEmpty()) guesses += cleaned to track.artist
+        }
+
+        val out = LinkedHashSet<TrackInfo>()
+        for ((title, artist) in guesses) {
+            out += track.copy(title = title, artist = artist)
+            // "告白氣球 Love Confession" never matches "告白氣球"; also try Chinese only.
+            out += track.copy(title = cjkOnly(title), artist = cjkOnly(artist))
         }
         out.remove(track)
-        return out.toList()
+        return out.take(MAX_VARIANTS)
     }
 
-    fun clean(raw: String): String {
+    /** [strip], or the original title when nothing is left (e.g. "《稻香》"). */
+    fun clean(raw: String): String = strip(raw).ifBlank { raw.trim() }
+
+    /** Removes bracketed parts, a cut-off bracket at the end and video junk words. */
+    private fun strip(raw: String): String {
         var s = raw
         while (true) {
             val next = BRACKETED.replace(s, " ")
@@ -49,9 +72,14 @@ internal object TitleVariants {
         }
         s = UNCLOSED.replace(s, " ")
         s = JUNK.replace(s, " ")
-        s = EDGE.replace(SPACES.replace(s, " ").trim(), "")
-        // Nothing left (the whole title was in brackets) → keep the original.
-        return s.ifBlank { raw.trim() }
+        return EDGE.replace(SPACES.replace(s, " ").trim(), "")
+    }
+
+    /** "周杰倫 Jay Chou" → "周杰倫"; text without both CJK and Latin is returned as is. */
+    fun cjkOnly(s: String): String {
+        if (!s.any { isCjk(it) } || !LATIN_WORD.containsMatchIn(s)) return s
+        val reduced = EDGE.replace(SPACES.replace(LATIN_WORD.replace(s, " "), " ").trim(), "")
+        return reduced.ifBlank { s }
     }
 
     /**
