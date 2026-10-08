@@ -50,10 +50,24 @@ object LyricsProviders {
     /**
      * Tries enabled providers in order. Returns the first synced result; if
      * only plain lyrics are found anywhere, returns the first plain one.
+     * When nothing at all is found, retries with cleaned-up / split titles
+     * (uploaded videos like "歌手 - 歌名『歌詞』").
      */
     fun fetch(prefs: SharedPreferences, track: TrackInfo): LyricsResult? {
+        val entries = load(prefs)
+        fetchOnce(entries, track)?.let { return it }
         var plain: LyricsResult? = null
-        for (entry in load(prefs)) {
+        for (variant in TitleVariants.of(track)) {
+            val result = fetchOnce(entries, variant) ?: continue
+            if (result.status == LyricsStatus.FOUND) return result
+            if (plain == null) plain = result
+        }
+        return plain
+    }
+
+    private fun fetchOnce(entries: List<Entry>, track: TrackInfo): LyricsResult? {
+        var plain: LyricsResult? = null
+        for (entry in entries) {
             if (!entry.enabled) continue
             val result = try {
                 entry.provider.fetch(track)

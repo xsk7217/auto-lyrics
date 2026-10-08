@@ -9,6 +9,7 @@ An Android Auto app that displays synced lyrics for the currently playing song, 
 - **Simplified → Traditional Chinese** conversion for lyrics (Android 10+ ICU).
 - **Title-change guard**: players that write lyrics into the title (e.g. YT Music + Morphe "Third-party lyrics") no longer trigger endless re-fetching.
 - **v1.10.1 — compact lyrics page**: on the AA lyrics list the song info is a small section title instead of a full row with album art, and 4 lyric lines are shown (1 previous, current, 2 upcoming). Toggle in settings.
+- **v1.10.2 — messy video titles**: when nothing is found, retries with brackets / "MV" / "動態歌詞" removed and with titles like "薛之謙-天外之物" or "不遺憾 (…) - 李榮浩『…』" split into artist and song name (both orders). Results still have to pass the normal title/artist/duration check.
 - Sources other than LRCLIB use unofficial endpoints and may break at any time.
 
 ## Features
