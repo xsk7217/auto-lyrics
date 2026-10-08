@@ -1,5 +1,6 @@
 package com.autolyrics.auto
 
+import android.content.ContentResolver
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.media.session.MediaController
@@ -41,6 +42,19 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
     private var aaOffsetMs = 0L
     private var aaLyricsAsTitle = true
     private var aaCompactHeader = true
+    private var tapMode = TAP_MODE_AUTO
+
+    /** Set from Android Auto's root hints: it can show per-row custom browse actions. */
+    private var browseActionsSupported = false
+
+    /**
+     * Folder mode: rows are folders "jump_<line>_<gen>". Opening one seeks once;
+     * [jumpGen] changes after every jump so reloads of an open page never seek again.
+     */
+    private var jumpGen = 0
+    private val handledJumps = mutableSetOf<String>()
+    /** Lyrics page Android Auto most recently loaded (the tab or a jump page). */
+    private var activeLyricsPage = LYRICS_ID
 
     /** When set, lyric rows get this as their Android Auto group (section) title. */
     private var currentGroupTitle: String? = null
@@ -64,6 +78,10 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
                     aaCompactHeader = sp.getBoolean(key, true)
                     forceRefresh()
                 }
+                PREF_TAP_MODE -> {
+                    tapMode = sp.getString(key, TAP_MODE_AUTO) ?: TAP_MODE_AUTO
+                    forceRefresh()
+                }
                 "aa_lyrics_as_title" -> {
                     aaLyricsAsTitle = sp.getBoolean(key, true)
                     lastSubtitleText = null
@@ -73,7 +91,29 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         }
 
     companion object {
+        const val PREF_TAP_MODE = "aa_tap_mode"
+        const val TAP_MODE_AUTO = "auto"
+        const val TAP_MODE_FOLDER = "folder"
+        const val TAP_MODE_ORIGINAL = "original"
+        private const val TAP_MODE_ACTION = "action"
+
         private const val ROOT_ID = "root"
+        private const val LYRICS_ID = "lyrics"
+        private const val JUMP_PREFIX = "jump_"
+        private const val ACTION_JUMP = "com.autolyrics.action.JUMP_TO_LINE"
+        private const val AA_PACKAGE = "com.google.android.projection.gearhead"
+        private const val JUMP_REFRESH_DELAY_MS = 400L
+
+        // androidx.media.utils.MediaConstants (custom browse actions), as strings so
+        // they don't depend on the androidx.media version.
+        private const val KEY_ACTION_LIMIT =
+            "androidx.media.utils.MediaBrowserCompat.extras.CUSTOM_BROWSER_ACTION_LIMIT"
+        private const val KEY_ACTION_ROOT_LIST = "androidx.media.utils.extras.CUSTOM_BROWSER_ACTION_ROOT_LIST"
+        private const val KEY_ACTION_ID = "androidx.media.utils.extras.KEY_CUSTOM_BROWSER_ACTION_ID"
+        private const val KEY_ACTION_LABEL = "androidx.media.utils.extras.KEY_CUSTOM_BROWSER_ACTION_LABEL"
+        private const val KEY_ACTION_ICON_URI = "androidx.media.utils.extras.KEY_CUSTOM_BROWSER_ACTION_ICON_URI"
+        private const val KEY_ITEM_ACTION_IDS = "androidx.media.utils.extras.CUSTOM_BROWSER_ACTION_ID_LIST"
+        private const val KEY_ACTION_MEDIA_ITEM_ID = "androidx.media.utils.extras.KEY_CUSTOM_BROWSER_ACTION_MEDIA_ITEM_ID"
         private const val SYNC_MENU_ID = "sync_menu"
         private const val SYNC_MINUS_ID = "sync_minus"
         private const val SYNC_PLUS_ID = "sync_plus"
@@ -99,6 +139,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         aaOffsetMs = prefs.getLong("aa_offset_ms", 0L)
         aaLyricsAsTitle = prefs.getBoolean("aa_lyrics_as_title", true)
         aaCompactHeader = prefs.getBoolean("aa_compact_header", true)
+        tapMode = prefs.getString(PREF_TAP_MODE, TAP_MODE_AUTO) ?: TAP_MODE_AUTO
         prefs.registerOnSharedPreferenceChangeListener(prefsListener)
 
         mediaSession = MediaSessionCompat(this, "AutoLyrics").apply {
@@ -157,7 +198,69 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         clientUid: Int,
         rootHints: Bundle?
     ): BrowserRoot {
-        return BrowserRoot(ROOT_ID, null)
+        // Only Android Auto's hints decide; other media clients connect too.
+        if (clientPackageName == AA_PACKAGE) {
+            browseActionsSupported = (rootHints?.getInt(KEY_ACTION_LIMIT, 0) ?: 0) > 0
+        }
+        if (!browseActionsSupported) return BrowserRoot(ROOT_ID, null)
+
+        val iconUri = ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + packageName +
+            "/drawable/ic_jump_line"
+        val jumpAction = Bundle().apply {
+            putString(KEY_ACTION_ID, ACTION_JUMP)
+            // Spoken by accessibility / shown only if the action overflows into a menu.
+            putString(KEY_ACTION_LABEL, "跳到這句")
+            putString(KEY_ACTION_ICON_URI, iconUri)
+        }
+        val extras = Bundle().apply {
+            putParcelableArrayList(KEY_ACTION_ROOT_LIST, arrayListOf(jumpAction))
+        }
+        return BrowserRoot(ROOT_ID, extras)
+    }
+
+    /** How lyric rows react to a tap right now: original, action button or folder. */
+    private fun effectiveTapMode(): String = when (tapMode) {
+        TAP_MODE_ORIGINAL -> TAP_MODE_ORIGINAL
+        TAP_MODE_FOLDER -> TAP_MODE_FOLDER
+        else -> if (browseActionsSupported) TAP_MODE_ACTION else TAP_MODE_FOLDER
+    }
+
+    override fun onCustomAction(action: String, extras: Bundle?, result: Result<Bundle>) {
+        if (action != ACTION_JUMP) {
+            super.onCustomAction(action, extras, result)
+            return
+        }
+        val itemId = extras?.getString(KEY_ACTION_MEDIA_ITEM_ID)
+        val index = itemId?.removePrefix("line_")?.toIntOrNull()
+        if (index != null) seekToLine(index)
+        result.sendResult(Bundle())
+    }
+
+    /** Seeks the player to a synced lyric line and refreshes the lyrics page soon after. */
+    private fun seekToLine(index: Int) {
+        val state = mediaTracker.state.value
+        if (state.status != LyricsStatus.FOUND) return
+        val line = state.lines.getOrNull(index) ?: return
+        getActiveMediaController()?.transportControls?.seekTo(line.timeMs.coerceAtLeast(0))
+        handler.postDelayed({ forceRefresh() }, JUMP_REFRESH_DELAY_MS)
+    }
+
+    /** Folder mode: opening "jump_<line>_<gen>" seeks once, then shows the lyrics. */
+    private fun handleJumpPage(parentId: String) {
+        if (!handledJumps.add(parentId)) return
+        if (handledJumps.size > 200) {
+            handledJumps.clear()
+            handledJumps.add(parentId)
+        }
+        jumpGen++
+        val index = parentId.removePrefix(JUMP_PREFIX).substringBefore('_').toIntOrNull() ?: return
+        seekToLine(index)
+    }
+
+    private fun notifyLyricsPages() {
+        notifyChildrenChanged(LYRICS_ID)
+        if (activeLyricsPage != LYRICS_ID) notifyChildrenChanged(activeLyricsPage)
+        notifyChildrenChanged(SYNC_MENU_ID)
     }
 
     override fun onLoadChildren(
@@ -179,6 +282,22 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             return
         }
 
+        if (parentId == ROOT_ID) {
+            // Two tabs: lyrics first so Android Auto opens on it, then sync.
+            items.add(buildBrowsableItem(LYRICS_ID, "Lyrics", ""))
+            items.add(buildBrowsableItem(SYNC_MENU_ID, "⟳ Sync", "Adjust offset"))
+            result.sendResult(items)
+            return
+        }
+
+        if (parentId.startsWith(JUMP_PREFIX)) {
+            handleJumpPage(parentId)
+        } else if (parentId != LYRICS_ID) {
+            result.sendResult(items)
+            return
+        }
+        activeLyricsPage = parentId
+
         when (state.status) {
             LyricsStatus.NO_MEDIA -> {
                 items.add(buildTextItem("no_media", "Play a song to see lyrics"))
@@ -198,7 +317,6 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             LyricsStatus.FOUND -> {
                 addTrackHeader(state, items)
                 buildWindowedLyrics(state, items)
-                items.add(buildBrowsableItem(SYNC_MENU_ID, "⟳ Sync", "Adjust offset"))
             }
             LyricsStatus.PLAIN_ONLY -> {
                 addTrackHeader(state, items)
@@ -226,7 +344,6 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
                         items.add(buildTextItem("line_$i", "    $text", pad = true, subtitle = trans))
                     }
                 }
-                items.add(buildBrowsableItem(SYNC_MENU_ID, "⟳ Sync", "Adjust offset"))
             }
         }
 
@@ -355,9 +472,22 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             }
 
             val trans = state.translatedLines?.getOrNull(i)?.takeIf { it.isNotBlank() }
-            items.add(buildTextItem("line_$i", "$prefix$text", pad = true, subtitle = trans))
+            items.add(buildLyricRow(i, "$prefix$text", trans))
         }
     }
+
+    /** A synced lyric row; what a tap does depends on [effectiveTapMode]. */
+    private fun buildLyricRow(index: Int, text: String, subtitle: String?): MediaBrowserCompat.MediaItem =
+        when (effectiveTapMode()) {
+            TAP_MODE_FOLDER -> buildTextItem(
+                "$JUMP_PREFIX${index}_$jumpGen", text, pad = true, subtitle = subtitle,
+                flags = MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
+            )
+            TAP_MODE_ACTION -> buildTextItem(
+                "line_$index", text, pad = true, subtitle = subtitle, actionIds = arrayListOf(ACTION_JUMP)
+            )
+            else -> buildTextItem("line_$index", text, pad = true, subtitle = subtitle)
+        }
 
     /**
      * Which synced lines to show: compact mode shows 1 previous, the current
@@ -371,19 +501,27 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         return maxOf(0, end - size) to end
     }
 
-    private fun buildTextItem(id: String, text: String, pad: Boolean = false, subtitle: String? = null): MediaBrowserCompat.MediaItem {
+    private fun buildTextItem(
+        id: String,
+        text: String,
+        pad: Boolean = false,
+        subtitle: String? = null,
+        flags: Int = MediaBrowserCompat.MediaItem.FLAG_PLAYABLE,
+        actionIds: ArrayList<String>? = null
+    ): MediaBrowserCompat.MediaItem {
         val title = if (pad) text.padEnd(PAD_WIDTH) else text
         val builder = MediaDescriptionCompat.Builder()
             .setMediaId(id)
             .setTitle(title)
         if (!subtitle.isNullOrBlank()) builder.setSubtitle(subtitle)
-        currentGroupTitle?.let { group ->
-            builder.setExtras(Bundle().apply { putString(GROUP_TITLE_KEY, group) })
+        val group = currentGroupTitle
+        if (group != null || actionIds != null) {
+            builder.setExtras(Bundle().apply {
+                group?.let { putString(GROUP_TITLE_KEY, it) }
+                actionIds?.let { putStringArrayList(KEY_ITEM_ACTION_IDS, it) }
+            })
         }
-        return MediaBrowserCompat.MediaItem(
-            builder.build(),
-            MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
-        )
+        return MediaBrowserCompat.MediaItem(builder.build(), flags)
     }
 
     private fun buildBrowsableItem(id: String, title: String, subtitle: String): MediaBrowserCompat.MediaItem {
@@ -391,7 +529,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             MediaDescriptionCompat.Builder()
                 .setMediaId(id)
                 .setTitle(title)
-                .setSubtitle(subtitle)
+                .setSubtitle(subtitle.ifBlank { null })
                 .build(),
             MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
         )
@@ -672,8 +810,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         displayedCurrentIdx = -1
         lastNotifyTime = 0L
         resetKaraokeState()
-        notifyChildrenChanged(ROOT_ID)
-        notifyChildrenChanged(SYNC_MENU_ID)
+        notifyLyricsPages()
     }
 
     private fun throttledNotifyChildren(state: LyricsState) {
@@ -690,8 +827,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             handler.removeCallbacksAndMessages(null)
             pendingNotify = false
             resetKaraokeState()
-            notifyChildrenChanged(ROOT_ID)
-            notifyChildrenChanged(SYNC_MENU_ID)
+            notifyLyricsPages()
             return
         }
 
@@ -713,15 +849,13 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
 
         if (elapsed >= NOTIFY_THROTTLE_MS) {
             lastNotifyTime = now
-            notifyChildrenChanged(ROOT_ID)
-            notifyChildrenChanged(SYNC_MENU_ID)
+            notifyLyricsPages()
         } else if (!pendingNotify) {
             pendingNotify = true
             handler.postDelayed({
                 pendingNotify = false
                 lastNotifyTime = System.currentTimeMillis()
-                notifyChildrenChanged(ROOT_ID)
-                notifyChildrenChanged(SYNC_MENU_ID)
+                notifyLyricsPages()
             }, NOTIFY_THROTTLE_MS - elapsed)
         }
     }
@@ -777,19 +911,13 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
                 else aaOffsetMs += SYNC_STEP_MS
                 getSharedPreferences("auto_lyrics_prefs", MODE_PRIVATE)
                     .edit().putLong("aa_offset_ms", aaOffsetMs).apply()
-                notifyChildrenChanged(ROOT_ID)
-                notifyChildrenChanged(SYNC_MENU_ID)
+                notifyLyricsPages()
                 return
             }
 
             if (!mediaId.startsWith("line_")) return
             val index = mediaId.removePrefix("line_").toIntOrNull() ?: return
-            val state = mediaTracker.state.value
-            if (state.status != LyricsStatus.FOUND) return
-            val line = state.lines.getOrNull(index) ?: return
-            if (line.timeMs > 0) {
-                getActiveMediaController()?.transportControls?.seekTo(line.timeMs)
-            }
+            seekToLine(index)
         }
     }
 }

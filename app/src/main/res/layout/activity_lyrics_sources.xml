@@ -136,6 +136,45 @@
                 android:textColor="#CCCCDD"
                 android:textSize="14sp" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="車機點歌詞時"
+                android:textColor="#CCCCDD"
+                android:textSize="14sp" />
+
+            <RadioGroup
+                android:id="@+id/rg_tap_mode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <RadioButton
+                    android:id="@+id/rb_tap_auto"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="自動：用歌詞旁的 ▶ 按鈕跳句、不換頁（車機不支援時改用資料夾模式）"
+                    android:textColor="#CCCCDD"
+                    android:textSize="13sp" />
+
+                <RadioButton
+                    android:id="@+id/rb_tap_folder"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="資料夾模式：點歌詞跳到那句，並開一個同樣的歌詞頁"
+                    android:textColor="#CCCCDD"
+                    android:textSize="13sp" />
+
+                <RadioButton
+                    android:id="@+id/rb_tap_original"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="原本的方式：點歌詞跳到那句，並切到播放畫面"
+                    android:textColor="#CCCCDD"
+                    android:textSize="13sp" />
+            </RadioGroup>
+
             <androidx.appcompat.widget.SwitchCompat
                 android:id="@+id/switch_traditional"
                 android:layout_width="match_parent"

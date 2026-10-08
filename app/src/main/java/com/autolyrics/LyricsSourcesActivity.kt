@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -16,6 +17,7 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.autolyrics.auto.LyricsBrowserService
 import com.autolyrics.lyrics.ChineseConverter
 import com.autolyrics.lyrics.providers.LyricsProviders
 import com.autolyrics.media.MediaTracker
@@ -87,6 +89,18 @@ class LyricsSourcesActivity : AppCompatActivity() {
 
         bindSwitch(R.id.switch_lyrics_title, "aa_lyrics_as_title")
         bindSwitch(R.id.switch_compact_header, "aa_compact_header")
+        val tapModes = mapOf(
+            R.id.rb_tap_auto to LyricsBrowserService.TAP_MODE_AUTO,
+            R.id.rb_tap_folder to LyricsBrowserService.TAP_MODE_FOLDER,
+            R.id.rb_tap_original to LyricsBrowserService.TAP_MODE_ORIGINAL
+        )
+        val tapGroup = findViewById<RadioGroup>(R.id.rg_tap_mode)
+        val savedMode = prefs.getString(LyricsBrowserService.PREF_TAP_MODE, LyricsBrowserService.TAP_MODE_AUTO)
+        tapGroup.check(tapModes.entries.firstOrNull { it.value == savedMode }?.key ?: R.id.rb_tap_auto)
+        tapGroup.setOnCheckedChangeListener { _, checkedId ->
+            tapModes[checkedId]?.let { prefs.edit().putString(LyricsBrowserService.PREF_TAP_MODE, it).apply() }
+        }
+
         bindSwitch(R.id.switch_traditional, MediaTracker.PREF_TRADITIONAL) {
             MediaTracker.getInstance(this).refetchCurrent()
         }
