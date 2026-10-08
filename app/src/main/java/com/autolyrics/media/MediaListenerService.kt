@@ -30,6 +30,9 @@ class MediaListenerService : NotificationListenerService() {
             )
             updateSessions()
         } catch (_: SecurityException) { }
+        try {
+            activeNotifications?.forEach { RecognizedSongs.onNotification(this, it) }
+        } catch (_: Exception) { }
     }
 
     override fun onListenerDisconnected() {
@@ -40,6 +43,7 @@ class MediaListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        sbn?.let { RecognizedSongs.onNotification(this, it) }
         updateSessions()
     }
 
