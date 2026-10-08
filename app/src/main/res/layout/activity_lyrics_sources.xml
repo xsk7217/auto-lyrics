@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background_dark"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/surface_dark"
+        android:paddingStart="8dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp">
+
+        <Button
+            android:id="@+id/btn_back"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:text="←"
+            android:textSize="20sp"
+            android:textColor="#E0E0FF"
+            android:background="@android:color/transparent"
+            android:minWidth="0dp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="歌詞來源與進階設定"
+            android:textColor="#E0E0FF"
+            android:textSize="20sp"
+            android:fontFamily="sans-serif-medium" />
+    </LinearLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="歌詞來源"
+                android:textColor="#8888AA"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="8dp"
+                android:text="勾選要使用的來源，按住右側 ≡ 拖曳排序。會由上往下找，先找到同步歌詞就停；都只有非同步歌詞時，用最上面那個。"
+                android:textColor="#AAAACC"
+                android:textSize="12sp" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_sources"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp">
+
+                <Button
+                    android:id="@+id/btn_reset_sources"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="4dp"
+                    android:text="恢復預設"
+                    android:textAllCaps="false"
+                    android:textColor="#CCCCDD"
+                    android:backgroundTint="#2A2A3E" />
+
+                <Button
+                    android:id="@+id/btn_refetch"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:text="重抓這首歌詞"
+                    android:textAllCaps="false"
+                    android:textColor="#CCCCDD"
+                    android:backgroundTint="#2A2A3E" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btn_clear_cache"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="清除所有歌詞快取"
+                android:textAllCaps="false"
+                android:textColor="#CCCCDD"
+                android:backgroundTint="#2A2A3E" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="顯示與比對"
+                android:textColor="#8888AA"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_lyrics_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="車機以大字顯示歌詞（歌名改小字）"
+                android:textColor="#CCCCDD"
+                android:textSize="14sp" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_compact_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="車機歌詞頁：歌名縮成小標題，顯示 4 行歌詞"
+                android:textColor="#CCCCDD"
+                android:textSize="14sp" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_traditional"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="簡體歌詞自動轉繁體"
+                android:textColor="#CCCCDD"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tv_traditional_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#8888AA"
+                android:textSize="12sp" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_title_guard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="防止播放器把歌詞寫進歌名造成誤判"
+                android:textColor="#CCCCDD"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="例如 YT Music Morphe 開啟第三方歌詞時。歌曲長度、專輯沒變且持續播放中，就視為同一首歌，不重抓歌詞。"
+                android:textColor="#8888AA"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

@@ -2,6 +2,15 @@
 
 An Android Auto app that displays synced lyrics for the currently playing song, powered by [LRCLIB](https://lrclib.net/).
 
+## v1.10.0 changes (fork)
+
+- **Android Auto**: the current lyric line is now the large title on the media card / now-playing screen; song name · artist moved to the small subtitle (toggle in settings).
+- **Multiple lyrics sources**: NetEase, QQ Music, KuGou, LRCLIB, SyncLRC, Musixmatch, YouTube Music. Enable with checkboxes and drag to reorder (phone → settings → "歌詞來源與進階設定"). First synced result wins.
+- **Simplified → Traditional Chinese** conversion for lyrics (Android 10+ ICU).
+- **Title-change guard**: players that write lyrics into the title (e.g. YT Music + Morphe "Third-party lyrics") no longer trigger endless re-fetching.
+- **v1.10.1 — compact lyrics page**: on the AA lyrics list the song info is a small section title instead of a full row with album art, and 4 lyric lines are shown (1 previous, current, 2 upcoming). Toggle in settings.
+- Sources other than LRCLIB use unofficial endpoints and may break at any time.
+
 ## Features
 
 - **Synced lyrics on Android Auto** — shows the current lyric line with surrounding context, updated in real-time

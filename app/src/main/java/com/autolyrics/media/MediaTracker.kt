@@ -9,12 +9,12 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import com.autolyrics.lyrics.LrcLibClient
-import com.autolyrics.lyrics.LrcParser
+import com.autolyrics.lyrics.ChineseConverter
 import com.autolyrics.lyrics.LyricsCache
 import com.autolyrics.lyrics.LyricsTranslator
 import com.autolyrics.lyrics.MetadataCleaner
-import com.autolyrics.lyrics.SyncLrcClient
+import com.autolyrics.lyrics.providers.LyricsProviders
+import com.autolyrics.lyrics.providers.LyricsResult
 import com.autolyrics.model.LyricLine
 import com.autolyrics.model.LyricsState
 import com.autolyrics.model.LyricsStatus
@@ -46,6 +46,7 @@ class MediaTracker private constructor(context: Context) {
     private var translationJob: Job? = null
     private var pendingTrack: TrackInfo? = null
     private var pendingArt: Bitmap? = null
+    private var trackChangePending = false
     private var lyricsOffsetMs: Long = 0L
 
     init {
@@ -63,6 +64,7 @@ class MediaTracker private constructor(context: Context) {
     }
 
     private val trackChangeRunnable = Runnable {
+        trackChangePending = false
         val track = pendingTrack ?: return@Runnable
         val art = pendingArt
         val current = _state.value.track
@@ -179,6 +181,7 @@ class MediaTracker private constructor(context: Context) {
         if (controller == null) {
             handler.removeCallbacks(positionChecker)
             handler.removeCallbacks(trackChangeRunnable)
+            trackChangePending = false
             artJob?.cancel()
             _state.value = LyricsState(offsetMs = lyricsOffsetMs)
             return
@@ -211,6 +214,30 @@ class MediaTracker private constructor(context: Context) {
         val newTrack = TrackInfo(title, artist, album, duration)
         val current = _state.value.track
 
+        // Some players (e.g. YT Music patched with Morphe "Third-party lyrics") write the
+        // current lyric line into the title field. Same duration/album while the song
+        // keeps playing means it is still the same song, so ignore the "new" title.
+        if (prefs.getBoolean(PREF_TITLE_GUARD, true)) {
+            val pending = pendingTrack
+            if (pending != null && trackChangePending &&
+                (newTrack.title != pending.title || newTrack.artist != pending.artist) &&
+                isSameSong(newTrack, pending)
+            ) {
+                if (art != null && pendingArt == null) pendingArt = art
+                return
+            }
+            if (current != null && (newTrack.title != current.title || newTrack.artist != current.artist) &&
+                isSameSong(newTrack, current) &&
+                rawPositionMs() > GUARD_MIN_POSITION_MS
+            ) {
+                if (art != null && _state.value.albumArt == null) {
+                    _state.value = _state.value.copy(albumArt = art)
+                    extractAlbumColors(art)
+                }
+                return
+            }
+        }
+
         if (current != null && newTrack.title == current.title && newTrack.artist == current.artist) {
             if (art != null && _state.value.albumArt == null) {
                 _state.value = _state.value.copy(albumArt = art)
@@ -222,8 +249,23 @@ class MediaTracker private constructor(context: Context) {
         pendingTrack = newTrack
         pendingArt = art
         handler.removeCallbacks(trackChangeRunnable)
+        trackChangePending = true
         handler.postDelayed(trackChangeRunnable, 600)
     }
+
+    /**
+     * Lyric-in-title players may also move the song name into the artist field,
+     * so only the duration (to the millisecond) and, when both have one, the
+     * album are compared. Two different songs practically never share both.
+     */
+    private fun isSameSong(a: TrackInfo, b: TrackInfo): Boolean {
+        if (a.durationMs <= 0 || a.durationMs != b.durationMs) return false
+        if (a.album.isNotBlank() && b.album.isNotBlank() && a.album != b.album) return false
+        return true
+    }
+
+    /** Player position without the user's lyric offset. */
+    private fun rawPositionMs(): Long = getCurrentPositionMs() - lyricsOffsetMs
 
     private fun extractAlbumColors(bitmap: Bitmap?) {
         artJob?.cancel()
@@ -261,7 +303,8 @@ class MediaTracker private constructor(context: Context) {
             try {
                 val cached = lyricsCache.get(track.title, track.artist)
                 if (cached != null) {
-                    val (lines, status, source) = cached
+                    val (rawLines, status, source) = cached
+                    val lines = finalizeLines(rawLines)
                     withContext(Dispatchers.Main) {
                         if (_state.value.track != track) return@withContext
                         _state.value = _state.value.copy(
@@ -284,15 +327,16 @@ class MediaTracker private constructor(context: Context) {
                     }
                 }
 
-                val result = fetchFromSyncLrc(track) ?: fetchFromLrcLib(track)
+                val result = fetchFromProviders(track)
+                val displayLines = result?.let { finalizeLines(it.lines) }
 
                 withContext(Dispatchers.Main) {
                     if (_state.value.track != track) return@withContext
 
-                    if (result != null) {
+                    if (result != null && displayLines != null) {
                         lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source)
                         _state.value = _state.value.copy(
-                            lines = result.lines,
+                            lines = displayLines,
                             currentIndex = -1,
                             currentWordIndex = -1,
                             status = result.status,
@@ -301,7 +345,7 @@ class MediaTracker private constructor(context: Context) {
                         if (result.status == LyricsStatus.FOUND) {
                             updateCurrentPosition()
                         }
-                        translateIfNeeded(result.lines, track)
+                        translateIfNeeded(displayLines, track)
                     } else if (cached == null) {
                         _state.value = _state.value.copy(
                             status = LyricsStatus.NOT_FOUND,
@@ -353,7 +397,7 @@ class MediaTracker private constructor(context: Context) {
                     if (lyricsCache.get(title, artist) != null) return@launch
 
                     val nextTrack = TrackInfo(title, artist, "", 0)
-                    val result = fetchFromSyncLrc(nextTrack) ?: fetchFromLrcLib(nextTrack)
+                    val result = fetchFromProviders(nextTrack)
                     if (result != null) {
                         lyricsCache.put(title, artist, result.lines, result.status, result.source)
                     }
@@ -365,70 +409,33 @@ class MediaTracker private constructor(context: Context) {
         }
     }
 
-    private data class FetchResult(
-        val lines: List<LyricLine>,
-        val status: LyricsStatus,
-        val source: String
-    )
+    /** Asks every enabled lyrics source, in the user's order. Raw (unconverted) lines. */
+    private fun fetchFromProviders(track: TrackInfo): LyricsResult? =
+        LyricsProviders.fetch(prefs, track)
 
-    private fun fetchFromSyncLrc(track: TrackInfo): FetchResult? {
-        val result = try {
-            SyncLrcClient.getLyrics(track.title, track.artist)
-        } catch (_: Exception) {
-            null
-        } ?: return null
+    /** Applies display-time conversions (Simplified → Traditional Chinese). */
+    private fun finalizeLines(lines: List<LyricLine>): List<LyricLine> =
+        if (prefs.getBoolean(PREF_TRADITIONAL, true)) ChineseConverter.linesToTraditional(lines) else lines
 
-        return when (result.type) {
-            SyncLrcClient.LyricsType.KARAOKE -> {
-                val lines = LrcParser.parseKaraoke(result.lyrics)
-                val hasRealText = lines.any { it.text != "♪" && it.text.isNotBlank() }
-                if (hasRealText) FetchResult(lines, LyricsStatus.FOUND, "SyncLRC · Karaoke")
-                else null
-            }
-            SyncLrcClient.LyricsType.SYNCED -> {
-                val lines = LrcParser.parse(result.lyrics)
-                val hasRealText = lines.any { it.text != "♪" && it.text.isNotBlank() }
-                if (hasRealText) FetchResult(lines, LyricsStatus.FOUND, "SyncLRC · Synced")
-                else null
-            }
-            SyncLrcClient.LyricsType.PLAIN -> {
-                val lines = result.lyrics.lines()
-                    .filter { it.isNotBlank() }
-                    .map { text -> LyricLine(0L, text) }
-                if (lines.isNotEmpty()) FetchResult(lines, LyricsStatus.PLAIN_ONLY, "SyncLRC · Plain")
-                else null
-            }
-        }
+    /** Forgets the current lyrics and fetches them again (used after settings change). */
+    fun refetchCurrent() {
+        val track = _state.value.track ?: return
+        lyricsCache.remove(track.title, track.artist)
+        translationJob?.cancel()
+        _state.value = _state.value.copy(
+            lines = emptyList(),
+            currentIndex = -1,
+            currentWordIndex = -1,
+            status = LyricsStatus.LOADING,
+            source = "",
+            translatedLines = null,
+            detectedLanguage = null
+        )
+        fetchLyrics(track)
     }
 
-    private fun fetchFromLrcLib(track: TrackInfo): FetchResult? {
-        val durationSec = if (track.durationMs > 0) (track.durationMs / 1000).toInt() else 0
-
-        val result = try {
-            LrcLibClient.getLyrics(
-                trackName = track.title,
-                artistName = track.artist,
-                albumName = track.album,
-                durationSec = durationSec
-            )
-        } catch (_: Exception) {
-            null
-        } ?: return null
-
-        if (result.syncedLyrics != null) {
-            val lines = LrcParser.parse(result.syncedLyrics)
-            val hasRealText = lines.any { it.text != "♪" && it.text.isNotBlank() }
-            if (hasRealText) return FetchResult(lines, LyricsStatus.FOUND, "LRCLIB · Synced")
-        }
-
-        if (result.plainLyrics != null) {
-            val lines = result.plainLyrics.lines()
-                .filter { it.isNotBlank() }
-                .map { text -> LyricLine(0L, text) }
-            if (lines.isNotEmpty()) return FetchResult(lines, LyricsStatus.PLAIN_ONLY, "LRCLIB · Plain")
-        }
-
-        return null
+    fun clearCache() {
+        lyricsCache.clear()
     }
 
     private fun translateIfNeeded(lines: List<LyricLine>, track: TrackInfo) {
@@ -451,6 +458,9 @@ class MediaTracker private constructor(context: Context) {
 
     companion object {
         private const val CACHE_REFRESH_MS = 7L * 24 * 60 * 60 * 1000
+        const val PREF_TRADITIONAL = "convert_traditional"
+        const val PREF_TITLE_GUARD = "title_change_guard"
+        private const val GUARD_MIN_POSITION_MS = 3_000L
 
         @Volatile
         private var instance: MediaTracker? = null

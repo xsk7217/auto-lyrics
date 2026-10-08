@@ -94,6 +94,14 @@ class LyricsCache(context: Context) {
         }
     }
 
+    fun remove(title: String, artist: String) {
+        try { cacheFile(title, artist).delete() } catch (_: Exception) { }
+    }
+
+    fun clear() {
+        try { cacheDir.listFiles()?.forEach { it.delete() } } catch (_: Exception) { }
+    }
+
     private fun cacheFile(title: String, artist: String): File {
         val key = "${title.lowercase().trim()}|${artist.lowercase().trim()}"
         val hash = key.hashCode().toUInt().toString(16)

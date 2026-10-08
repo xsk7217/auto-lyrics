@@ -139,6 +139,10 @@ class MainActivity : AppCompatActivity() {
                 View.GONE else View.VISIBLE
         }
 
+        findViewById<Button>(R.id.btn_lyrics_sources).setOnClickListener {
+            startActivity(Intent(this, LyricsSourcesActivity::class.java))
+        }
+
         findViewById<Button>(R.id.btn_performance_mode).setOnClickListener {
             startActivity(Intent(this, PerformanceActivity::class.java))
         }

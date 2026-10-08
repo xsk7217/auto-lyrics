@@ -369,6 +369,21 @@
                 android:layout_height="wrap_content" />
         </LinearLayout>
 
+        <!-- Lyrics sources & advanced settings -->
+        <Button
+            android:id="@+id/btn_lyrics_sources"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="8dp"
+            android:text="歌詞來源與進階設定 ›"
+            android:textSize="13sp"
+            android:textColor="#CCCCDD"
+            android:backgroundTint="#2A2A3E"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:textAllCaps="false"
+            style="?attr/materialButtonOutlinedStyle" />
+
         <!-- AA Delay row -->
         <LinearLayout
             android:layout_width="match_parent"
