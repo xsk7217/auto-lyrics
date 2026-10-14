@@ -44,6 +44,10 @@ class MediaTracker private constructor(context: Context) {
     private var prefetchJob: Job? = null
     private var artJob: Job? = null
     private var translationJob: Job? = null
+    private var switchJob: Job? = null
+    /** Sources "換來源重抓" already used for [triedForTrack] (provider ids). */
+    private val triedSources = mutableSetOf<String>()
+    private var triedForTrack: TrackInfo? = null
     private var pendingTrack: TrackInfo? = null
     private var pendingArt: Bitmap? = null
     private var trackChangePending = false
@@ -81,7 +85,9 @@ class MediaTracker private constructor(context: Context) {
             albumArt = art,
             albumColors = null,
             translatedLines = null,
-            detectedLanguage = null
+            detectedLanguage = null,
+            switchingSource = false,
+            switchMessage = null
         )
         fetchLyrics(track)
         extractAlbumColors(art)
@@ -432,6 +438,65 @@ class MediaTracker private constructor(context: Context) {
             detectedLanguage = null
         )
         fetchLyrics(track)
+    }
+
+    /**
+     * "換來源重抓": looks for lyrics in the sources not used yet for this track
+     * (the current one first of all). Found → shown and cached. Nothing else
+     * found → current lyrics stay, and the next press starts over.
+     */
+    fun refetchFromOtherSource(onDone: ((String) -> Unit)? = null) {
+        val track = _state.value.track ?: return
+        if (triedForTrack != track) {
+            triedSources.clear()
+            triedForTrack = track
+        }
+        LyricsProviders.idForSource(_state.value.source)?.let { triedSources += it }
+        val exclude = triedSources.toSet()
+
+        switchJob?.cancel()
+        _state.value = _state.value.copy(switchingSource = true, switchMessage = "換來源中…")
+        switchJob = scope.launch(Dispatchers.IO) {
+            val result = try {
+                LyricsProviders.fetch(prefs, track, exclude)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            val displayLines = result?.let { finalizeLines(it.lines) }
+
+            withContext(Dispatchers.Main) {
+                if (_state.value.track != track) return@withContext
+                val message: String
+                if (result != null && displayLines != null) {
+                    val id = LyricsProviders.idForSource(result.source)
+                    id?.let { triedSources += it }
+                    message = "已改用 ${id?.let { LyricsProviders.displayName(it) } ?: result.source}"
+                    lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source)
+                    translationJob?.cancel()
+                    _state.value = _state.value.copy(
+                        lines = displayLines,
+                        currentIndex = -1,
+                        currentWordIndex = -1,
+                        status = result.status,
+                        source = result.source,
+                        translatedLines = null,
+                        detectedLanguage = null,
+                        switchingSource = false,
+                        switchMessage = message
+                    )
+                    if (result.status == LyricsStatus.FOUND) updateCurrentPosition()
+                    translateIfNeeded(displayLines, track)
+                } else {
+                    triedSources.clear()
+                    message = if (_state.value.lines.isEmpty()) "其他來源也都沒有找到"
+                        else "其他來源都沒有找到，保留目前的歌詞"
+                    _state.value = _state.value.copy(switchingSource = false, switchMessage = message)
+                }
+                onDone?.invoke(message)
+            }
+        }
     }
 
     fun clearCache() {

@@ -53,8 +53,8 @@ object LyricsProviders {
      * When nothing at all is found, retries with cleaned-up / split titles
      * (uploaded videos like "歌手 - 歌名『歌詞』").
      */
-    fun fetch(prefs: SharedPreferences, track: TrackInfo): LyricsResult? {
-        val entries = load(prefs)
+    fun fetch(prefs: SharedPreferences, track: TrackInfo, exclude: Set<String> = emptySet()): LyricsResult? {
+        val entries = load(prefs).filter { it.provider.id !in exclude }
         fetchOnce(entries, track)?.let { return it }
         var plain: LyricsResult? = null
         for (variant in TitleVariants.of(track)) {
@@ -64,6 +64,12 @@ object LyricsProviders {
         }
         return plain
     }
+
+    /** Provider id from a result/cache source label like "QQ 音樂 · Synced (cached)". */
+    fun idForSource(source: String): String? =
+        all.firstOrNull { source.startsWith(it.displayName) }?.id
+
+    fun displayName(id: String): String = all.firstOrNull { it.id == id }?.displayName ?: id
 
     private fun fetchOnce(entries: List<Entry>, track: TrackInfo): LyricsResult? {
         var plain: LyricsResult? = null

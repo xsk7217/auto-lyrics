@@ -79,8 +79,10 @@ class LyricsSourcesActivity : AppCompatActivity() {
             save()
         }
         findViewById<Button>(R.id.btn_refetch).setOnClickListener {
-            MediaTracker.getInstance(this).refetchCurrent()
-            Toast.makeText(this, "正在用新的來源設定重抓", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "換來源中…", Toast.LENGTH_SHORT).show()
+            MediaTracker.getInstance(this).refetchFromOtherSource { msg ->
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
         }
         findViewById<Button>(R.id.btn_clear_cache).setOnClickListener {
             MediaTracker.getInstance(this).clearCache()
@@ -100,6 +102,13 @@ class LyricsSourcesActivity : AppCompatActivity() {
         tapGroup.setOnCheckedChangeListener { _, checkedId ->
             tapModes[checkedId]?.let { prefs.edit().putString(LyricsBrowserService.PREF_TAP_MODE, it).apply() }
         }
+
+        // Which clients connected and how many custom browse actions they allow
+        // (0 = the car does not support the ▶ button, folder mode is used).
+        val clients = prefs.getString("aa_client_info", null)
+        findViewById<TextView>(R.id.tv_aa_client).text =
+            if (clients.isNullOrBlank()) "車機連線資訊：還沒有記錄（連上 Android Auto 後再回來看）"
+            else "車機連線資訊（程式 : ▶ 按鈕上限，0 = 不支援）\n$clients"
 
         bindSwitch(R.id.switch_traditional, MediaTracker.PREF_TRADITIONAL) {
             MediaTracker.getInstance(this).refetchCurrent()

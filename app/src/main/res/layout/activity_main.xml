@@ -156,6 +156,16 @@
             style="?attr/materialButtonOutlinedStyle" />
 
         <ImageButton
+            android:id="@+id/btn_switch_source"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_refresh"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="換來源重抓歌詞"
+            android:scaleType="centerInside"
+            android:padding="6dp" />
+
+        <ImageButton
             android:id="@+id/btn_settings_toggle"
             android:layout_width="36dp"
             android:layout_height="36dp"

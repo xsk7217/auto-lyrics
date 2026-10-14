@@ -66,6 +66,12 @@
             </intent-filter>
         </service>
 
+        <!-- Icons for Android Auto custom browse actions (read-only, public PNGs) -->
+        <provider
+            android:name=".auto.IconProvider"
+            android:authorities="${applicationId}.icons"
+            android:exported="true" />
+
         <!-- Start service on boot / app update so AA discovers it -->
         <receiver
             android:name=".auto.BootReceiver"

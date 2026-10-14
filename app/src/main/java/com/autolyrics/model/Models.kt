@@ -49,5 +49,9 @@ data class LyricsState(
     val albumArt: Bitmap? = null,
     val albumColors: AlbumColors? = null,
     val translatedLines: List<String>? = null,
-    val detectedLanguage: String? = null
+    val detectedLanguage: String? = null,
+    /** "換來源重抓" is running. */
+    val switchingSource: Boolean = false,
+    /** Outcome of the last "換來源重抓" for this track, e.g. "已改用 QQ 音樂". */
+    val switchMessage: String? = null
 )

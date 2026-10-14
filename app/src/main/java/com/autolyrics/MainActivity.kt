@@ -25,6 +25,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
@@ -133,6 +134,13 @@ class MainActivity : AppCompatActivity() {
         lyricsFontFamily = prefs.getString("lyrics_font_family", "sans-serif") ?: "sans-serif"
 
         applyFontSettings()
+
+        findViewById<ImageButton>(R.id.btn_switch_source).setOnClickListener {
+            Toast.makeText(this, "換來源中…", Toast.LENGTH_SHORT).show()
+            MediaTracker.getInstance(this).refetchFromOtherSource { msg ->
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+        }
 
         findViewById<ImageButton>(R.id.btn_settings_toggle).setOnClickListener {
             fontSettingsPanel.visibility = if (fontSettingsPanel.visibility == View.VISIBLE)
