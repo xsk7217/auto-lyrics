@@ -35,7 +35,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.autolyrics.lyrics.LyricsTranslator
 import com.autolyrics.media.MediaListenerService
 import com.autolyrics.media.MediaTracker
-import com.autolyrics.model.AlbumColors
+import com.autolyrics.ui.HaloView
+import com.autolyrics.ui.Palette
+import com.autolyrics.ui.ThemeStyler
+import com.autolyrics.ui.Themes
+import com.google.android.material.button.MaterialButton
 import com.autolyrics.model.LyricsState
 import com.autolyrics.model.LyricsStatus
 import kotlinx.coroutines.launch
@@ -44,8 +48,10 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var mediaTracker: MediaTracker
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
-    private lateinit var rootLayout: LinearLayout
-    private lateinit var appBar: LinearLayout
+    private lateinit var rootLayout: View
+    private lateinit var appBar: View
+    private lateinit var palette: Palette
+    private lateinit var halo: HaloView
     private lateinit var tvAppTitle: TextView
     private lateinit var tvAppSubtitle: TextView
     private lateinit var tvStatus: TextView
@@ -58,7 +64,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var delayBar: LinearLayout
     private lateinit var tvDelay: TextView
     private lateinit var divider: View
-    private lateinit var fontSettingsPanel: LinearLayout
+    private lateinit var fontSettingsPanel: View
     private lateinit var tvFontSize: TextView
     private lateinit var switchAaKaraoke: SwitchCompat
     private lateinit var switchTranslation: SwitchCompat
@@ -67,7 +73,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnJumpToCurrent: Button
     private lateinit var prefs: SharedPreferences
     private var lastScrolledIndex = -1
-    private var currentColors: AlbumColors? = null
     private var lyricsFontSizeSp = 16
     private var lyricsFontFamily = "sans-serif"
     private var aaOffsetMs = 0L
@@ -91,7 +96,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        ThemeStyler.install(this, R.layout.activity_main)
+        palette = Themes.current(this)
 
         mediaTracker = MediaTracker.getInstance(this)
         prefs = getSharedPreferences("auto_lyrics_prefs", MODE_PRIVATE)
@@ -113,6 +119,9 @@ class MainActivity : AppCompatActivity() {
         divider = findViewById(R.id.divider)
 
         ivAlbumArt.clipToOutline = true
+        halo = findViewById(R.id.halo)
+        findViewById<View>(R.id.lyrics_card).clipToOutline = true
+        setupAppearanceControls()
         btnJumpToCurrent = findViewById(R.id.btn_jump_to_current)
 
         setupScrollDetection()
@@ -131,7 +140,11 @@ class MainActivity : AppCompatActivity() {
             mediaTracker.resetOffset()
         }
 
-        fontSettingsPanel = findViewById(R.id.layout_font_settings)
+        fontSettingsPanel = findViewById(R.id.panel_scroll)
+        if (prefs.getBoolean(KEY_PANEL_OPEN, false)) {
+            fontSettingsPanel.visibility = View.VISIBLE
+            prefs.edit().putBoolean(KEY_PANEL_OPEN, false).apply()
+        }
         tvFontSize = findViewById(R.id.tv_font_size)
 
         lyricsFontSizeSp = prefs.getInt("lyrics_font_size", 16)
@@ -279,7 +292,7 @@ class MainActivity : AppCompatActivity() {
                     updatePermissionUi()
                     updateDelayDisplay(state.offsetMs)
                     updateAlbumArt(state)
-                    applyThemeColors(state.albumColors)
+                    halo.setBreathing(state.isPlaying && ivAlbumArt.visibility == View.VISIBLE)
 
                     if (state.track != null) {
                         val artistText = if (state.track.artist.isNotBlank())
@@ -287,8 +300,8 @@ class MainActivity : AppCompatActivity() {
                         tvTrack.text = "${state.track.title}\n$artistText"
                         tvTrack.visibility = View.VISIBLE
                     } else {
-                        tvTrack.text = ""
-                        tvTrack.visibility = View.GONE
+                        tvTrack.text = "還沒有播放中的歌曲"
+                        tvTrack.visibility = View.VISIBLE
                     }
 
                     tvTranslationStatus.text = state.translationStatus.orEmpty()
@@ -333,7 +346,7 @@ class MainActivity : AppCompatActivity() {
                             val sb = SpannableStringBuilder()
                             sb.append("ℹ  Lyrics are not synced to playback\n\n")
                             sb.append("─────────────────────\n\n")
-                            val dimColor = state.albumColors?.textDim ?: DEFAULT_DIM
+                            val dimColor = palette.dim
                             state.lines.forEachIndexed { i, line ->
                                 sb.append("${line.text}\n")
                                 if (hasTrans) {
@@ -369,49 +382,12 @@ class MainActivity : AppCompatActivity() {
         if (art != null) {
             ivAlbumArt.setImageBitmap(art)
             ivAlbumArt.visibility = View.VISIBLE
+            halo.visibility = View.VISIBLE
         } else {
             ivAlbumArt.setImageDrawable(null)
             ivAlbumArt.visibility = View.GONE
+            halo.visibility = View.GONE
         }
-    }
-
-    private fun applyThemeColors(colors: AlbumColors?) {
-        if (colors == currentColors) return
-        currentColors = colors
-
-        if (colors != null) {
-            val gradient = GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(colors.dominant, colors.dominantDark)
-            )
-            rootLayout.background = gradient
-
-            appBar.setBackgroundColor(lighten(colors.dominant, 1.3f))
-            delayBar.setBackgroundColor(lighten(colors.dominantDark, 1.2f))
-            divider.setBackgroundColor(lighten(colors.dominant, 1.8f))
-
-            tvAppTitle.setTextColor(colors.textPrimary)
-            tvAppSubtitle.setTextColor(colors.textDim)
-            tvTrack.setTextColor(colors.vibrant)
-            tvLyrics.setTextColor(colors.textPrimary)
-        } else {
-            rootLayout.setBackgroundColor(DEFAULT_BG)
-            appBar.setBackgroundColor(DEFAULT_APP_BAR)
-            delayBar.setBackgroundColor(DEFAULT_DELAY_BAR)
-            divider.setBackgroundColor(DEFAULT_DIVIDER)
-
-            tvAppTitle.setTextColor(Color.parseColor("#E0E0FF"))
-            tvAppSubtitle.setTextColor(Color.parseColor("#8888AA"))
-            tvTrack.setTextColor(Color.parseColor("#BB86FC"))
-            tvLyrics.setTextColor(Color.parseColor("#CCCCDD"))
-        }
-    }
-
-    private fun lighten(color: Int, factor: Float): Int {
-        val r = (Color.red(color) * factor).toInt().coerceIn(0, 255)
-        val g = (Color.green(color) * factor).toInt().coerceIn(0, 255)
-        val b = (Color.blue(color) * factor).toInt().coerceIn(0, 255)
-        return Color.rgb(r, g, b)
     }
 
     private fun updateDelayDisplay(offsetMs: Long) {
@@ -425,10 +401,9 @@ class MainActivity : AppCompatActivity() {
     private fun renderSyncedLyrics(state: LyricsState) {
         val ssb = SpannableStringBuilder()
         val hasKaraoke = state.lines.any { it.words.isNotEmpty() }
-        val colors = state.albumColors
-        val highlightColor = colors?.vibrant ?: DEFAULT_HIGHLIGHT
-        val highlightBg = setAlpha(highlightColor, 0.2f)
-        val dimColor = colors?.textDim ?: DEFAULT_DIM
+        val highlightColor = palette.accent
+        val highlightBg = palette.chip
+        val dimColor = palette.dim
 
         state.lines.forEachIndexed { i, line ->
             val isCurrentLine = i == state.currentIndex
@@ -453,7 +428,7 @@ class MainActivity : AppCompatActivity() {
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                         )
                         ssb.setSpan(
-                            ForegroundColorSpan(highlightColor),
+                            ForegroundColorSpan(palette.text),
                             wordStart, wordEnd,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                         )
@@ -482,13 +457,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            if (!isCurrentLine) {
-                ssb.setSpan(
-                    ForegroundColorSpan(dimColor),
-                    lineStart, ssb.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-            }
+            ssb.setSpan(
+                ForegroundColorSpan(if (isCurrentLine) palette.accent else dimColor),
+                lineStart, ssb.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
 
             val translatedLine = state.translatedLines?.getOrNull(i)
             if (!translatedLine.isNullOrBlank()) {
@@ -625,13 +598,66 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateFontButtonHighlights() {
-        val selectedTint = Color.parseColor("#3A3A5E")
-        val normalTint = Color.parseColor("#2A2A3E")
         fontButtons.forEach { (family, button) ->
-            button.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                if (family == lyricsFontFamily) selectedTint else normalTint
-            )
+            (button as? MaterialButton)?.let { ThemeStyler.styleChip(it, palette, family == lyricsFontFamily) }
         }
+    }
+
+    /** 外觀 (深色 / 淺色 / 跟隨系統) and 配色 chips in the settings panel, plus the header toggle. */
+    private fun setupAppearanceControls() {
+        val modeButtons = mapOf(
+            Themes.MODE_DARK to findViewById<MaterialButton>(R.id.btn_mode_dark),
+            Themes.MODE_LIGHT to findViewById<MaterialButton>(R.id.btn_mode_light),
+            Themes.MODE_SYSTEM to findViewById<MaterialButton>(R.id.btn_mode_system)
+        )
+        val paletteButtons = mapOf(
+            "indigo" to findViewById<MaterialButton>(R.id.btn_pal_indigo),
+            "ocean" to findViewById<MaterialButton>(R.id.btn_pal_ocean),
+            "midnight" to findViewById<MaterialButton>(R.id.btn_pal_midnight),
+            "graphite" to findViewById<MaterialButton>(R.id.btn_pal_graphite)
+        )
+        val mode = Themes.mode(this)
+        val paletteId = Themes.paletteId(this)
+        modeButtons.forEach { (id, b) ->
+            ThemeStyler.styleChip(b, palette, id == mode)
+            b.setOnClickListener { changeMode(id) }
+        }
+        paletteButtons.forEach { (id, b) ->
+            ThemeStyler.styleChip(b, palette, id == paletteId)
+            b.setOnClickListener {
+                if (id != Themes.paletteId(this)) {
+                    Themes.setPalette(this, id)
+                    reopenWithPanel()
+                }
+            }
+        }
+        findViewById<ImageButton>(R.id.btn_theme_cycle).setOnClickListener {
+            val order = Themes.MODES.keys.toList()
+            val next = order[(order.indexOf(Themes.mode(this)) + 1) % order.size]
+            Toast.makeText(this, "外觀：${Themes.MODES[next]}", Toast.LENGTH_SHORT).show()
+            changeMode(next)
+        }
+    }
+
+    private fun changeMode(mode: String) {
+        if (mode == Themes.mode(this)) return
+        prefs.edit().putBoolean(KEY_PANEL_OPEN, fontSettingsPanel.visibility == View.VISIBLE).apply()
+        val systemNight = (android.content.res.Resources.getSystem().configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val willBeDark = when (mode) {
+            Themes.MODE_DARK -> true
+            Themes.MODE_LIGHT -> false
+            else -> systemNight
+        }
+        Themes.setMode(this, mode)
+        // AppCompat recreates the activity itself when dark/light really flips;
+        // otherwise (e.g. 跟隨系統 resolving to the same) redraw for the chip state.
+        if (willBeDark == palette.dark) recreate()
+    }
+
+    private fun reopenWithPanel() {
+        prefs.edit().putBoolean(KEY_PANEL_OPEN, fontSettingsPanel.visibility == View.VISIBLE).apply()
+        recreate()
     }
 
     private fun onTapSyncPressed() {
@@ -675,17 +701,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setTapSyncActiveStyle(active: Boolean) {
-        if (active) {
-            btnTapSync.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                Color.parseColor("#4A2A6E")
-            )
-            btnTapSync.setTextColor(Color.parseColor("#EEDDFF"))
-        } else {
-            btnTapSync.backgroundTintList = android.content.res.ColorStateList.valueOf(
-                Color.parseColor("#2A2A3E")
-            )
-            btnTapSync.setTextColor(Color.parseColor("#CCCCDD"))
-        }
+        (btnTapSync as? MaterialButton)?.let { ThemeStyler.styleChip(it, palette, active) }
     }
 
     private fun getCurrentRawPositionMs(): Long {
@@ -760,16 +776,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private val DEFAULT_BG = Color.parseColor("#121212")
-        private val DEFAULT_APP_BAR = Color.parseColor("#1E1E2E")
-        private val DEFAULT_DELAY_BAR = Color.parseColor("#1A1A2A")
-        private val DEFAULT_DIVIDER = Color.parseColor("#2A2A3A")
-        private val DEFAULT_HIGHLIGHT = Color.parseColor("#FFD54F")
-        private val DEFAULT_DIM = Color.parseColor("#99FFFFFF")
-
-        private fun setAlpha(color: Int, alpha: Float): Int {
-            val a = (alpha * 255).toInt().coerceIn(0, 255)
-            return Color.argb(a, Color.red(color), Color.green(color), Color.blue(color))
-        }
+        /** Keeps the settings panel open across a theme change (recreate). */
+        private const val KEY_PANEL_OPEN = "ui_panel_open_once"
     }
 }

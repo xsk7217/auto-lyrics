@@ -1,53 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Colors here are only "roles" for ui/ThemeStyler (bright = text, grey = secondary);
+     the real colors come from the chosen palette and dark / light mode. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#121212">
+    android:fitsSystemWindows="true"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
 
-    <!-- App Bar -->
+    <!-- Header -->
     <LinearLayout
         android:id="@+id/layout_app_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#1E1E2E"
-        android:elevation="4dp"
-        android:padding="20dp">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="12dp"
+        android:paddingBottom="8dp">
 
-        <TextView
-            android:id="@+id/tv_app_title"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Auto Lyrics"
-            android:textColor="#E0E0FF"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-medium" />
+            android:layout_weight="1"
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/tv_app_subtitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Synced lyrics on Android Auto"
-            android:textColor="#8888AA"
-            android:textSize="14sp"
-            android:paddingTop="4dp" />
+            <TextView
+                android:id="@+id/tv_app_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Auto Lyrics"
+                android:textColor="#E0E0FF"
+                android:textSize="22sp"
+                android:fontFamily="sans-serif-medium" />
+
+            <TextView
+                android:id="@+id/tv_app_subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="車上的同步歌詞"
+                android:textColor="#8888AA"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btn_theme_cycle"
+            style="@style/AL.IconButton"
+            android:src="@drawable/ic_theme"
+            android:contentDescription="切換深色／淺色／跟隨系統" />
     </LinearLayout>
-
-    <!-- Lyrics search (phone only) -->
-    <Button
-        android:id="@+id/btn_lyrics_search"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginTop="12dp"
-        android:text="🔍 搜尋歌詞 ／ 聽聲辨曲記錄"
-        android:textAllCaps="false"
-        android:textColor="#CCCCDD"
-        android:backgroundTint="#2A2A3E" />
 
     <!-- Permission Status -->
     <TextView
@@ -58,468 +61,367 @@
         android:textColor="#FFFFFF"
         android:textSize="14sp"
         android:gravity="center"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginTop="16dp" />
+        android:layout_marginTop="8dp"
+        android:visibility="gone" />
 
     <Button
         android:id="@+id/btn_permission"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        style="@style/AL.Chip"
         android:layout_gravity="center_horizontal"
         android:layout_marginTop="8dp"
-        android:text="Grant Notification Access"
-        android:textAllCaps="false"
+        android:text="開啟通知存取權"
         android:visibility="gone" />
 
-    <!-- Track Info + Album Art + Source -->
+    <!-- Lyrics search (phone only) -->
+    <Button
+        android:id="@+id/btn_lyrics_search"
+        style="@style/AL.Chip"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginEnd="0dp"
+        android:layout_marginTop="4dp"
+        android:gravity="start|center_vertical"
+        android:paddingStart="16dp"
+        android:text="搜尋歌詞 ／ 聽聲辨曲記錄"
+        android:textSize="14sp"
+        app:icon="@drawable/ic_search"
+        app:iconSize="18dp"
+        app:iconPadding="10dp"
+        app:cornerRadius="23dp" />
+
+    <!-- Now playing -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="10dp">
+        android:padding="12dp"
+        android:tag="glass">
 
-        <ImageView
-            android:id="@+id/iv_album_art"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:scaleType="centerCrop"
-            android:visibility="gone"
-            android:layout_marginEnd="12dp"
-            android:background="@drawable/bg_album_art" />
+        <FrameLayout
+            android:layout_width="84dp"
+            android:layout_height="84dp">
+
+            <com.autolyrics.ui.HaloView
+                android:id="@+id/halo"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/iv_album_art"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_gravity="center"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                android:background="@drawable/bg_album_round"
+                android:contentDescription="專輯封面" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:layout_marginStart="8dp"
             android:orientation="vertical">
 
             <TextView
                 android:id="@+id/tv_track"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="#BB86FC"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:lineSpacingExtra="3dp"
+                android:textColor="#E0E0FF"
+                android:textSize="15sp"
+                android:fontFamily="sans-serif-medium"
+                android:lineSpacingExtra="2dp"
                 android:maxLines="2"
                 android:ellipsize="end"
+                android:text="還沒有播放中的歌曲" />
+
+            <TextView
+                android:id="@+id/tv_source"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:tag="sub"
+                android:textSize="11sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tv_translation_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:tag="hint"
+                android:textSize="11sp"
                 android:visibility="gone" />
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/tv_source"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:paddingTop="3dp"
-            android:paddingBottom="3dp"
-            android:textColor="#AAAACC"
-            android:textSize="10sp"
-            android:fontFamily="sans-serif-medium"
-            android:background="@drawable/bg_source_pill"
-            android:visibility="gone" />
     </LinearLayout>
 
-    <!-- Translation hint (detecting / downloading model / done) -->
-    <TextView
-        android:id="@+id/tv_translation_status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="4dp"
-        android:textColor="#8888AA"
-        android:textSize="12sp"
-        android:visibility="gone" />
-
-    <!-- Settings toggle row -->
+    <!-- Toolbar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
         android:orientation="horizontal"
-        android:gravity="center_vertical|end"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp">
+        android:gravity="center_vertical|end">
 
         <Button
             android:id="@+id/btn_performance_mode"
-            android:layout_width="wrap_content"
-            android:layout_height="34dp"
-            android:text="⚡ Performance"
-            android:textSize="11sp"
-            android:textColor="#CCCCDD"
-            android:backgroundTint="#2A2A3E"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:textAllCaps="false"
-            android:minWidth="0dp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:layout_marginEnd="8dp"
-            style="?attr/materialButtonOutlinedStyle" />
+            style="@style/AL.Chip"
+            android:text="全螢幕歌詞" />
 
         <ImageButton
             android:id="@+id/btn_switch_source"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            style="@style/AL.IconButton"
             android:src="@drawable/ic_refresh"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="換來源重抓歌詞"
-            android:scaleType="centerInside"
-            android:padding="6dp" />
+            android:contentDescription="換來源重抓歌詞" />
 
         <ImageButton
             android:id="@+id/btn_settings_toggle"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            style="@style/AL.IconButton"
             android:src="@drawable/ic_settings"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Text settings"
-            android:scaleType="centerInside"
-            android:padding="6dp" />
+            android:contentDescription="顯示設定" />
     </LinearLayout>
 
-    <!-- Font settings panel (collapsed by default) -->
-    <LinearLayout
-        android:id="@+id/layout_font_settings"
+    <!-- Settings panel (collapsed by default) -->
+    <ScrollView
+        android:id="@+id/panel_scroll"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#1A1A2A"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="10dp"
+        android:layout_height="0dp"
+        android:layout_weight="1.4"
+        android:layout_marginTop="6dp"
         android:visibility="gone">
 
-        <!-- Font size row -->
         <LinearLayout
+            android:id="@+id/layout_font_settings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="16dp"
+            android:tag="glass">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <TextView style="@style/AL.Label" android:text="外觀" />
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Size"
-                android:textColor="#8888AA"
-                android:textSize="12sp"
-                android:fontFamily="sans-serif-medium"
-                android:layout_marginEnd="12dp" />
+                android:orientation="horizontal">
+                <Button android:id="@+id/btn_mode_dark" style="@style/AL.Chip" android:text="深色" />
+                <Button android:id="@+id/btn_mode_light" style="@style/AL.Chip" android:text="淺色" />
+                <Button android:id="@+id/btn_mode_system" style="@style/AL.Chip" android:text="跟隨系統" />
+            </LinearLayout>
+
+            <TextView style="@style/AL.Label" android:text="配色" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button android:id="@+id/btn_pal_indigo" style="@style/AL.Chip" android:text="靛紫" />
+                <Button android:id="@+id/btn_pal_ocean" style="@style/AL.Chip" android:text="深海" />
+                <Button android:id="@+id/btn_pal_midnight" style="@style/AL.Chip" android:text="夜空" />
+                <Button android:id="@+id/btn_pal_graphite" style="@style/AL.Chip" android:text="石墨" />
+            </LinearLayout>
+
+            <TextView style="@style/AL.Label" android:text="歌詞字體大小" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <Button android:id="@+id/btn_font_size_minus" style="@style/AL.Chip" android:text="A−" />
+                <TextView
+                    android:id="@+id/tv_font_size"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="52dp"
+                    android:gravity="center"
+                    android:text="16sp"
+                    android:textColor="#CCCCDD"
+                    android:textSize="13sp" />
+                <Button android:id="@+id/btn_font_size_plus" style="@style/AL.Chip" android:text="A+" />
+            </LinearLayout>
+
+            <TextView style="@style/AL.Label" android:text="歌詞字型" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button android:id="@+id/btn_font_sans" style="@style/AL.Chip" android:text="黑體" android:fontFamily="sans-serif" />
+                <Button android:id="@+id/btn_font_serif" style="@style/AL.Chip" android:text="襯線" android:fontFamily="serif" />
+                <Button android:id="@+id/btn_font_mono" style="@style/AL.Chip" android:text="等寬" android:fontFamily="monospace" />
+                <Button android:id="@+id/btn_font_cursive" style="@style/AL.Chip" android:text="手寫" android:fontFamily="cursive" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="16dp"
+                android:background="#2A2A3A" />
+
+            <TextView style="@style/AL.Label" android:text="Android Auto" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="車機逐字卡拉 OK"
+                    android:textColor="#CCCCDD"
+                    android:textSize="13sp" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switch_aa_karaoke"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="翻譯歌詞"
+                    android:textColor="#CCCCDD"
+                    android:textSize="13sp" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switch_translation"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
 
             <Button
-                android:id="@+id/btn_font_size_minus"
-                android:layout_width="38dp"
-                android:layout_height="34dp"
-                android:text="A−"
-                android:textSize="13sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:padding="0dp"
-                android:textAllCaps="false"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <TextView
-                android:id="@+id/tv_font_size"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:layout_marginEnd="10dp"
-                android:text="16sp"
-                android:textColor="#CCCCDD"
-                android:textSize="13sp"
-                android:fontFamily="sans-serif-medium"
-                android:minWidth="48dp"
-                android:gravity="center" />
+                android:id="@+id/btn_translation_target"
+                style="@style/AL.Chip"
+                android:layout_width="match_parent"
+                android:layout_marginEnd="0dp"
+                android:layout_marginTop="6dp" />
 
             <Button
-                android:id="@+id/btn_font_size_plus"
-                android:layout_width="38dp"
-                android:layout_height="34dp"
-                android:text="A+"
-                android:textSize="13sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:padding="0dp"
-                android:textAllCaps="false"
-                style="?attr/materialButtonOutlinedStyle" />
+                android:id="@+id/btn_lyrics_sources"
+                style="@style/AL.Chip"
+                android:layout_width="match_parent"
+                android:layout_marginEnd="0dp"
+                android:layout_marginTop="8dp"
+                android:text="歌詞來源與進階設定 ›" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:text="車機延遲"
+                    android:textColor="#8888AA"
+                    android:textSize="12sp" />
+                <Button android:id="@+id/btn_aa_delay_minus" style="@style/AL.Chip" android:text="−" />
+                <TextView
+                    android:id="@+id/tv_aa_delay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="56dp"
+                    android:gravity="center"
+                    android:text="0ms"
+                    android:textColor="#CCCCDD"
+                    android:textSize="13sp" />
+                <Button android:id="@+id/btn_aa_delay_plus" style="@style/AL.Chip" android:text="+" />
+                <Button android:id="@+id/btn_aa_delay_reset" style="@style/AL.Chip" android:text="重設" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="16dp"
+                android:background="#2A2A3A" />
+
+            <TextView style="@style/AL.Label" android:text="手機歌詞延遲" />
+
+            <LinearLayout
+                android:id="@+id/layout_delay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <Button android:id="@+id/btn_delay_minus" style="@style/AL.Chip" android:text="−" />
+                    <TextView
+                        android:id="@+id/tv_delay"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minWidth="100dp"
+                        android:gravity="center"
+                        android:text="0ms"
+                        android:textColor="#CCCCDD"
+                        android:textSize="13sp" />
+                    <Button android:id="@+id/btn_delay_plus" style="@style/AL.Chip" android:text="+" />
+                    <Button android:id="@+id/btn_delay_reset" style="@style/AL.Chip" android:text="重設" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+                    <Button android:id="@+id/btn_quick_minus_1s" style="@style/AL.Chip" android:text="−1s" />
+                    <Button android:id="@+id/btn_quick_minus_half" style="@style/AL.Chip" android:text="−0.5s" />
+                    <Button android:id="@+id/btn_quick_plus_half" style="@style/AL.Chip" android:text="+0.5s" />
+                    <Button android:id="@+id/btn_quick_plus_1s" style="@style/AL.Chip" android:text="+1s" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_tap_sync"
+                    style="@style/AL.Chip"
+                    android:layout_width="match_parent"
+                    android:layout_marginEnd="0dp"
+                    android:layout_marginTop="6dp"
+                    android:text="Tap to Sync" />
+
+                <TextView
+                    android:id="@+id/tv_sync_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:paddingTop="6dp"
+                    android:textColor="#CCCCDD"
+                    android:textSize="14sp"
+                    android:lineSpacingMultiplier="1.2"
+                    android:visibility="gone" />
+            </LinearLayout>
         </LinearLayout>
-
-        <!-- Font family row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Font"
-                android:textColor="#8888AA"
-                android:textSize="12sp"
-                android:fontFamily="sans-serif-medium"
-                android:layout_marginEnd="12dp" />
-
-            <Button
-                android:id="@+id/btn_font_sans"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:text="Sans"
-                android:textSize="11sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#3A3A5E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <Button
-                android:id="@+id/btn_font_serif"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:text="Serif"
-                android:textSize="11sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_marginStart="6dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <Button
-                android:id="@+id/btn_font_mono"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:text="Mono"
-                android:textSize="11sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_marginStart="6dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <Button
-                android:id="@+id/btn_font_cursive"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:text="Cursive"
-                android:textSize="11sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_marginStart="6dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                style="?attr/materialButtonOutlinedStyle" />
-        </LinearLayout>
-
-        <!-- Android Auto section divider -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#2A2A3A"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Android Auto"
-            android:textColor="#8888AA"
-            android:textSize="12sp"
-            android:fontFamily="sans-serif-medium"
-            android:layout_marginBottom="8dp" />
-
-        <!-- AA Karaoke toggle -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Karaoke Mode"
-                android:textColor="#CCCCDD"
-                android:textSize="13sp" />
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switch_aa_karaoke"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <!-- Translation toggle -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Translate Lyrics"
-                android:textColor="#CCCCDD"
-                android:textSize="13sp" />
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switch_translation"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <Button
-            android:id="@+id/btn_translation_target"
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:textSize="13sp"
-            android:textColor="#CCCCDD"
-            android:backgroundTint="#2A2A3E"
-            android:textAllCaps="false"
-            android:insetTop="0dp"
-            android:insetBottom="0dp" />
-
-        <!-- Lyrics sources & advanced settings -->
-        <Button
-            android:id="@+id/btn_lyrics_sources"
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:layout_marginTop="8dp"
-            android:text="歌詞來源與進階設定 ›"
-            android:textSize="13sp"
-            android:textColor="#CCCCDD"
-            android:backgroundTint="#2A2A3E"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:textAllCaps="false"
-            style="?attr/materialButtonOutlinedStyle" />
-
-        <!-- AA Delay row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="AA Sync"
-                android:textColor="#8888AA"
-                android:textSize="12sp"
-                android:fontFamily="sans-serif-medium"
-                android:layout_marginEnd="12dp" />
-
-            <Button
-                android:id="@+id/btn_aa_delay_minus"
-                android:layout_width="38dp"
-                android:layout_height="34dp"
-                android:text="−"
-                android:textSize="16sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:padding="0dp"
-                android:textAllCaps="false"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <TextView
-                android:id="@+id/tv_aa_delay"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
-                android:text="0ms"
-                android:textColor="#CCCCDD"
-                android:textSize="13sp"
-                android:fontFamily="sans-serif-medium"
-                android:minWidth="56dp"
-                android:gravity="center" />
-
-            <Button
-                android:id="@+id/btn_aa_delay_plus"
-                android:layout_width="38dp"
-                android:layout_height="34dp"
-                android:text="+"
-                android:textSize="16sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:padding="0dp"
-                android:textAllCaps="false"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <Button
-                android:id="@+id/btn_aa_delay_reset"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:text="Reset"
-                android:textSize="10sp"
-                android:textColor="#8888AA"
-                android:backgroundTint="#222233"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_marginStart="6dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                style="?attr/materialButtonOutlinedStyle" />
-        </LinearLayout>
-    </LinearLayout>
+    </ScrollView>
 
     <View
         android:id="@+id/divider"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#2A2A3A"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp" />
+        android:layout_height="0dp" />
 
     <!-- Lyrics -->
     <FrameLayout
+        android:id="@+id/lyrics_card"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="12dp"
+        android:tag="glass">
 
         <ScrollView
             android:id="@+id/scroll_lyrics"
@@ -535,222 +437,18 @@
                 android:textColor="#CCCCDD"
                 android:textSize="16sp"
                 android:lineSpacingExtra="6dp"
-                android:fontFamily="sans-serif"
                 android:gravity="center_horizontal"
                 android:text="Play a song to see lyrics here.\n\nLyrics will also appear on Android Auto." />
         </ScrollView>
 
         <Button
             android:id="@+id/btn_jump_to_current"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            style="@style/AL.Chip"
             android:layout_gravity="bottom|center_horizontal"
             android:layout_marginBottom="12dp"
-            android:text="↓ Jump to Current"
-            android:textSize="12sp"
-            android:textColor="#FFFFFF"
-            android:backgroundTint="#6200EE"
-            android:elevation="6dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:textAllCaps="false"
-            android:minWidth="0dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:visibility="gone"
-            style="?attr/materialButtonOutlinedStyle" />
-    </FrameLayout>
-
-    <!-- Delay Controls -->
-    <LinearLayout
-        android:id="@+id/layout_delay"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#1A1A2A"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center">
-
-            <Button
-                android:id="@+id/btn_delay_minus"
-                android:layout_width="40dp"
-                android:layout_height="36dp"
-                android:text="−"
-                android:textSize="18sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:padding="0dp"
-                android:textAllCaps="false"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <TextView
-                android:id="@+id/tv_delay"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_marginEnd="12dp"
-                android:text="Sync: 0ms"
-                android:textColor="#8888AA"
-                android:textSize="13sp"
-                android:fontFamily="sans-serif-medium"
-                android:minWidth="100dp"
-                android:gravity="center" />
-
-            <Button
-                android:id="@+id/btn_delay_plus"
-                android:layout_width="40dp"
-                android:layout_height="36dp"
-                android:text="+"
-                android:textSize="18sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:padding="0dp"
-                android:textAllCaps="false"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <Button
-                android:id="@+id/btn_delay_reset"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:text="Reset"
-                android:textSize="11sp"
-                android:textColor="#8888AA"
-                android:backgroundTint="#222233"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_marginStart="8dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                style="?attr/materialButtonOutlinedStyle" />
-        </LinearLayout>
-
-        <!-- Sync tools row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:paddingTop="6dp">
-
-            <Button
-                android:id="@+id/btn_tap_sync"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:text="Tap to Sync"
-                android:textSize="11sp"
-                android:textColor="#CCCCDD"
-                android:backgroundTint="#2A2A3E"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                style="?attr/materialButtonOutlinedStyle" />
-        </LinearLayout>
-
-        <!-- Sync status (full-width below buttons for readability) -->
-        <TextView
-            android:id="@+id/tv_sync_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="2dp"
-            android:textColor="#CCCCDD"
-            android:textSize="14sp"
-            android:lineSpacingMultiplier="1.2"
+            android:layout_marginEnd="0dp"
+            android:tag="chip-on"
+            android:text="↓ 回到目前歌詞"
             android:visibility="gone" />
-
-        <!-- Quick offset row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:paddingTop="4dp">
-
-            <Button
-                android:id="@+id/btn_quick_minus_1s"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:text="−1s"
-                android:textSize="10sp"
-                android:textColor="#AAAACC"
-                android:backgroundTint="#222233"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <Button
-                android:id="@+id/btn_quick_minus_half"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:text="−0.5s"
-                android:textSize="10sp"
-                android:textColor="#AAAACC"
-                android:backgroundTint="#222233"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_marginStart="6dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <Button
-                android:id="@+id/btn_quick_plus_half"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:text="+0.5s"
-                android:textSize="10sp"
-                android:textColor="#AAAACC"
-                android:backgroundTint="#222233"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_marginStart="6dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <Button
-                android:id="@+id/btn_quick_plus_1s"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:text="+1s"
-                android:textSize="10sp"
-                android:textColor="#AAAACC"
-                android:backgroundTint="#222233"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_marginStart="6dp"
-                android:textAllCaps="false"
-                android:minWidth="0dp"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                style="?attr/materialButtonOutlinedStyle" />
-        </LinearLayout>
-    </LinearLayout>
-
+    </FrameLayout>
 </LinearLayout>

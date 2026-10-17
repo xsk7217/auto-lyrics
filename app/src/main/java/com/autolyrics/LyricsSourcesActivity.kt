@@ -21,6 +21,9 @@ import com.autolyrics.auto.LyricsBrowserService
 import com.autolyrics.lyrics.ChineseConverter
 import com.autolyrics.lyrics.providers.LyricsProviders
 import com.autolyrics.media.MediaTracker
+import com.autolyrics.ui.Palette
+import com.autolyrics.ui.ThemeStyler
+import com.autolyrics.ui.Themes
 import java.util.Collections
 
 /** Phone settings: pick lyrics sources (checkbox) and their order (drag). */
@@ -30,10 +33,12 @@ class LyricsSourcesActivity : AppCompatActivity() {
     private val entries = mutableListOf<LyricsProviders.Entry>()
     private lateinit var adapter: SourceAdapter
     private lateinit var touchHelper: ItemTouchHelper
+    private lateinit var palette: Palette
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_lyrics_sources)
+        palette = Themes.current(this)
+        ThemeStyler.install(this, R.layout.activity_lyrics_sources)
         prefs = getSharedPreferences("auto_lyrics_prefs", MODE_PRIVATE)
 
         findViewById<Button>(R.id.btn_back).setOnClickListener { finish() }
@@ -141,7 +146,10 @@ class LyricsSourcesActivity : AppCompatActivity() {
     private inner class SourceAdapter : RecyclerView.Adapter<SourceHolder>() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SourceHolder =
-            SourceHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_lyrics_source, parent, false))
+            SourceHolder(
+                LayoutInflater.from(parent.context).inflate(R.layout.item_lyrics_source, parent, false)
+                    .also { ThemeStyler.style(it, palette) }
+            )
 
         override fun getItemCount() = entries.size
 

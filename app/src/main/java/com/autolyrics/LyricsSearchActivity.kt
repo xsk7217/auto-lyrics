@@ -18,6 +18,10 @@ import com.autolyrics.media.MediaTracker
 import com.autolyrics.media.RecognizedSongs
 import com.autolyrics.model.LyricsStatus
 import com.autolyrics.model.TrackInfo
+import com.autolyrics.ui.Palette
+import com.autolyrics.ui.ThemeStyler
+import com.autolyrics.ui.Themes
+import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -38,10 +42,12 @@ class LyricsSearchActivity : AppCompatActivity() {
     private lateinit var tvResultSource: TextView
     private lateinit var tvResult: TextView
     private var searchJob: Job? = null
+    private lateinit var palette: Palette
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_lyrics_search)
+        palette = Themes.current(this)
+        ThemeStyler.install(this, R.layout.activity_lyrics_search)
         prefs = getSharedPreferences("auto_lyrics_prefs", MODE_PRIVATE)
 
         etTitle = findViewById(R.id.et_title)
@@ -75,12 +81,11 @@ class LyricsSearchActivity : AppCompatActivity() {
         val songs = RecognizedSongs.list(this)
         tvRecentHint.visibility = if (songs.isEmpty()) View.VISIBLE else View.GONE
         for (song in songs) {
-            val btn = Button(this).apply {
+            val btn = MaterialButton(this).apply {
                 text = if (song.artist.isNotBlank()) "${song.title} · ${song.artist}" else song.title
                 isAllCaps = false
                 textAlignment = View.TEXT_ALIGNMENT_VIEW_START
-                setTextColor(0xFFCCCCDD.toInt())
-                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF2A2A3E.toInt())
+                ThemeStyler.styleChip(this, palette, false)
                 setOnClickListener {
                     etTitle.setText(song.title)
                     etArtist.setText(song.artist)

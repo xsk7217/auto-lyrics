@@ -2,6 +2,9 @@ package com.autolyrics
 
 import android.animation.ValueAnimator
 import android.graphics.Color
+import com.autolyrics.ui.Palette
+import com.autolyrics.ui.ThemeStyler
+import com.autolyrics.ui.Themes
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.SpannableStringBuilder
@@ -43,13 +46,15 @@ class PerformanceActivity : AppCompatActivity() {
     private lateinit var nextLine: TextView
     private lateinit var exitHint: TextView
 
+    private lateinit var palette: Palette
     private var lastRenderedIndex = -1
     private var lastRenderedWord = -1
     private var wordPopAnimator: ValueAnimator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_performance)
+        palette = Themes.current(this)
+        ThemeStyler.install(this, R.layout.activity_performance)
 
         enterImmersiveMode()
 
@@ -99,8 +104,9 @@ class PerformanceActivity : AppCompatActivity() {
             trackArtist.text = track.artist.ifBlank { "" }
         }
 
+        // The palette's aurora is the background now, not the blurred cover.
+        albumBg.visibility = View.GONE
         state.albumArt?.let { art ->
-            albumBg.setImageBitmap(art)
             albumArt.setImageBitmap(art)
             albumArt.visibility = View.VISIBLE
         } ?: run {
@@ -115,8 +121,7 @@ class PerformanceActivity : AppCompatActivity() {
             sourceLabel.visibility = View.GONE
         }
 
-        val colors = state.albumColors
-        val accentColor = colors?.vibrant ?: DEFAULT_ACCENT
+        val accentColor = palette.text
 
         when (state.status) {
             LyricsStatus.NO_MEDIA -> {

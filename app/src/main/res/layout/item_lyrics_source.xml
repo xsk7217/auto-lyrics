@@ -5,7 +5,7 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:layout_marginBottom="6dp"
-    android:background="@color/surface_dark"
+    android:tag="glass"
     android:paddingStart="4dp"
     android:paddingEnd="4dp"
     android:paddingTop="6dp"
