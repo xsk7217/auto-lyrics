@@ -19,6 +19,7 @@ An Android Auto app that displays synced lyrics for the currently playing song, 
 - **v1.12.1**: clearer tap feedback (buttons shrink slightly and spring back, ripple in the palette accent); quick phone-lyrics delay − / value / + (±0.5 s) on the main screen, left of 全螢幕歌詞.
 - **v1.12.2**: bigger − / + delay buttons on the main screen; spacing between the ⟳ and ⚙ buttons.
 - **v1.12.3**: messy-title fallback also splits "Artist- Song" (a space on one side of the dash is enough; "Anti-Hero" still stays whole) and drops " Ft. / feat. …" guest artists, e.g. "Maroon 5- Sugar (Remix) Ft. Nicki Minaj" → Sugar / Maroon 5.
+- **v1.12.4**: main-screen toolbar fills the width with fixed 8dp gaps; − / + are wider and as tall as 全螢幕歌詞.
 - Sources other than LRCLIB use unofficial endpoints and may break at any time.
 
 ## Features
