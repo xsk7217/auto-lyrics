@@ -25,6 +25,8 @@ internal object TitleVariants {
     private val SONG_BRACKETS = Regex("""【([^【】]*)】|「([^「」]*)」|『([^『』]*)』|《([^《》]*)》""")
     private val LATIN_WORD = Regex("""[A-Za-z][A-Za-z0-9'’.&]*""")
     private const val MAX_VARIANTS = 4
+    /** " Ft. Nicki Minaj" / " feat. X" to the end: guest artists, not the song name. */
+    private val FEATURING = Regex("""\s+\b(?:ft|feat|featuring)\b\.?\s+.*$""", RegexOption.IGNORE_CASE)
     private val SEPARATOR = Regex("""\s*[-–—－|｜]\s*""")
     private val SPACES = Regex("""\s{2,}""")
     private val EDGE = Regex("""^[\s\-–—－|｜:：,，·•]+|[\s\-–—－|｜:：,，·•]+$""")
@@ -72,6 +74,7 @@ internal object TitleVariants {
         }
         s = UNCLOSED.replace(s, " ")
         s = JUNK.replace(s, " ")
+        s = FEATURING.replace(s, "")
         return EDGE.replace(SPACES.replace(s, " ").trim(), "")
     }
 
@@ -83,12 +86,12 @@ internal object TitleVariants {
     }
 
     /**
-     * Splits at the first dash/bar that has spaces on both sides or touches a
-     * CJK character, so "Anti-Hero" stays whole.
+     * Splits at the first dash/bar with a space on at least one side
+     * ("Maroon 5- Sugar") or touching a CJK character, so "Anti-Hero" stays whole.
      */
     fun split(s: String): Pair<String, String>? {
         for (m in SEPARATOR.findAll(s)) {
-            val spaced = m.value.first().isWhitespace() && m.value.last().isWhitespace()
+            val spaced = m.value.first().isWhitespace() || m.value.last().isWhitespace()
             val before = s.getOrNull(m.range.first - 1)
             val after = s.getOrNull(m.range.last + 1)
             if (!spaced && !isCjk(before) && !isCjk(after)) continue
