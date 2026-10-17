@@ -53,5 +53,7 @@ data class LyricsState(
     /** "換來源重抓" is running. */
     val switchingSource: Boolean = false,
     /** Outcome of the last "換來源重抓" for this track, e.g. "已改用 QQ 音樂". */
-    val switchMessage: String? = null
+    val switchMessage: String? = null,
+    /** Phone hint about translation, e.g. "翻譯：日文 → 繁體中文". */
+    val translationStatus: String? = null
 )

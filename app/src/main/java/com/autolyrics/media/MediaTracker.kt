@@ -12,6 +12,7 @@ import android.os.SystemClock
 import com.autolyrics.lyrics.ChineseConverter
 import com.autolyrics.lyrics.LyricsCache
 import com.autolyrics.lyrics.LyricsTranslator
+import com.autolyrics.lyrics.TranslationOutcome
 import com.autolyrics.lyrics.MetadataCleaner
 import com.autolyrics.lyrics.providers.LyricsProviders
 import com.autolyrics.lyrics.providers.LyricsResult
@@ -86,6 +87,7 @@ class MediaTracker private constructor(context: Context) {
             albumColors = null,
             translatedLines = null,
             detectedLanguage = null,
+            translationStatus = null,
             switchingSource = false,
             switchMessage = null
         )
@@ -435,7 +437,8 @@ class MediaTracker private constructor(context: Context) {
             status = LyricsStatus.LOADING,
             source = "",
             translatedLines = null,
-            detectedLanguage = null
+            detectedLanguage = null,
+            translationStatus = null
         )
         fetchLyrics(track)
     }
@@ -483,6 +486,7 @@ class MediaTracker private constructor(context: Context) {
                         source = result.source,
                         translatedLines = null,
                         detectedLanguage = null,
+                        translationStatus = null,
                         switchingSource = false,
                         switchMessage = message
                     )
@@ -503,27 +507,49 @@ class MediaTracker private constructor(context: Context) {
         lyricsCache.clear()
     }
 
+    /** Translation switch or target language changed: apply to the current song now. */
+    fun onTranslationSettingsChanged() {
+        translationJob?.cancel()
+        val s = _state.value
+        _state.value = s.copy(translatedLines = null, detectedLanguage = null, translationStatus = null)
+        val track = s.track ?: return
+        if (s.lines.isNotEmpty() && (s.status == LyricsStatus.FOUND || s.status == LyricsStatus.PLAIN_ONLY)) {
+            translateIfNeeded(s.lines, track)
+        }
+    }
+
     private fun translateIfNeeded(lines: List<LyricLine>, track: TrackInfo) {
-        if (!prefs.getBoolean("translation_enabled", true)) return
+        if (!prefs.getBoolean(PREF_TRANSLATION, true)) return
+        val target = prefs.getString(PREF_TRANSLATION_TARGET, null) ?: LyricsTranslator.DEFAULT_TARGET
         translationJob?.cancel()
         translationJob = scope.launch(Dispatchers.IO) {
-            try {
-                val result = LyricsTranslator.translateLines(lines) ?: return@launch
-                withContext(Dispatchers.Main) {
-                    if (_state.value.track == track) {
-                        _state.value = _state.value.copy(
-                            translatedLines = result.translatedLines,
-                            detectedLanguage = result.detectedLanguage
-                        )
-                    }
+            suspend fun show(update: (LyricsState) -> LyricsState) = withContext(Dispatchers.Main) {
+                if (_state.value.track == track) _state.value = update(_state.value)
+            }
+            val outcome = try {
+                LyricsTranslator.translateLines(lines, target) { msg ->
+                    show { it.copy(translationStatus = msg) }
                 }
-            } catch (_: Exception) { }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                TranslationOutcome.Failed("翻譯：發生錯誤，換首歌再試")
+            }
+            show {
+                if (outcome is TranslationOutcome.Done) it.copy(
+                    translatedLines = outcome.translatedLines,
+                    detectedLanguage = outcome.detectedLanguage,
+                    translationStatus = outcome.message
+                ) else it.copy(translationStatus = outcome.message)
+            }
         }
     }
 
     companion object {
         private const val CACHE_REFRESH_MS = 7L * 24 * 60 * 60 * 1000
         const val PREF_TRADITIONAL = "convert_traditional"
+        const val PREF_TRANSLATION = "translation_enabled"
+        const val PREF_TRANSLATION_TARGET = "translation_target"
         const val PREF_TITLE_GUARD = "title_change_guard"
         private const val GUARD_MIN_POSITION_MS = 3_000L
 

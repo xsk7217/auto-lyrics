@@ -27,10 +27,12 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.SwitchCompat
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.autolyrics.lyrics.LyricsTranslator
 import com.autolyrics.media.MediaListenerService
 import com.autolyrics.media.MediaTracker
 import com.autolyrics.model.AlbumColors
@@ -60,6 +62,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvFontSize: TextView
     private lateinit var switchAaKaraoke: SwitchCompat
     private lateinit var switchTranslation: SwitchCompat
+    private lateinit var tvTranslationStatus: TextView
     private lateinit var tvAaDelay: TextView
     private lateinit var btnJumpToCurrent: Button
     private lateinit var prefs: SharedPreferences
@@ -102,6 +105,7 @@ class MainActivity : AppCompatActivity() {
         ivAlbumArt = findViewById(R.id.iv_album_art)
         tvTrack = findViewById(R.id.tv_track)
         tvSource = findViewById(R.id.tv_source)
+        tvTranslationStatus = findViewById(R.id.tv_translation_status)
         tvLyrics = findViewById(R.id.tv_lyrics)
         scrollView = findViewById(R.id.scroll_lyrics)
         delayBar = findViewById(R.id.layout_delay)
@@ -205,7 +209,30 @@ class MainActivity : AppCompatActivity() {
         switchTranslation = findViewById(R.id.switch_translation)
         switchTranslation.isChecked = prefs.getBoolean("translation_enabled", true)
         switchTranslation.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("translation_enabled", isChecked).apply()
+            prefs.edit().putBoolean(MediaTracker.PREF_TRANSLATION, isChecked).apply()
+            MediaTracker.getInstance(this).onTranslationSettingsChanged()
+        }
+
+        val btnTarget = findViewById<Button>(R.id.btn_translation_target)
+        fun showTarget() {
+            val tag = prefs.getString(MediaTracker.PREF_TRANSLATION_TARGET, null) ?: LyricsTranslator.DEFAULT_TARGET
+            btnTarget.text = "翻譯成：${LyricsTranslator.targetName(tag)} ▾"
+        }
+        showTarget()
+        btnTarget.setOnClickListener {
+            val tags = LyricsTranslator.TARGETS.keys.toList()
+            val current = prefs.getString(MediaTracker.PREF_TRANSLATION_TARGET, null) ?: LyricsTranslator.DEFAULT_TARGET
+            AlertDialog.Builder(this)
+                .setTitle("翻譯成哪種語言")
+                .setSingleChoiceItems(
+                    LyricsTranslator.TARGETS.values.toTypedArray(), tags.indexOf(current).coerceAtLeast(0)
+                ) { dialog, which ->
+                    prefs.edit().putString(MediaTracker.PREF_TRANSLATION_TARGET, tags[which]).apply()
+                    showTarget()
+                    MediaTracker.getInstance(this).onTranslationSettingsChanged()
+                    dialog.dismiss()
+                }
+                .show()
         }
 
         findViewById<Button>(R.id.btn_aa_delay_minus).setOnClickListener {
@@ -264,11 +291,12 @@ class MainActivity : AppCompatActivity() {
                         tvTrack.visibility = View.GONE
                     }
 
+                    tvTranslationStatus.text = state.translationStatus.orEmpty()
+                    tvTranslationStatus.visibility =
+                        if (state.translationStatus.isNullOrBlank()) View.GONE else View.VISIBLE
+
                     if (state.source.isNotBlank()) {
-                        val srcText = if (state.detectedLanguage != null) {
-                            "${state.source} · ${state.detectedLanguage}→en"
-                        } else state.source
-                        tvSource.text = srcText
+                        tvSource.text = state.source
                         tvSource.visibility = View.VISIBLE
                     } else {
                         tvSource.visibility = View.GONE
