@@ -165,7 +165,36 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:orientation="horizontal"
-        android:gravity="center_vertical|end">
+        android:gravity="center_vertical">
+
+        <!-- Quick phone-lyrics delay: ±0.5 s (finer steps in the ⚙ panel) -->
+        <Button
+            android:id="@+id/btn_tb_delay_minus"
+            style="@style/AL.Chip"
+            android:layout_marginEnd="0dp"
+            android:contentDescription="歌詞提早 0.5 秒"
+            android:text="−" />
+
+        <TextView
+            android:id="@+id/tv_tb_delay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="52dp"
+            android:gravity="center"
+            android:text="0.0s"
+            android:textColor="#8888AA"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btn_tb_delay_plus"
+            style="@style/AL.Chip"
+            android:contentDescription="歌詞延後 0.5 秒"
+            android:text="+" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
 
         <Button
             android:id="@+id/btn_performance_mode"

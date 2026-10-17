@@ -136,6 +136,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btn_delay_plus).setOnClickListener {
             mediaTracker.adjustOffset(100)
         }
+        findViewById<Button>(R.id.btn_tb_delay_minus).setOnClickListener { mediaTracker.adjustOffset(-500) }
+        findViewById<Button>(R.id.btn_tb_delay_plus).setOnClickListener { mediaTracker.adjustOffset(500) }
         findViewById<Button>(R.id.btn_delay_reset).setOnClickListener {
             mediaTracker.resetOffset()
         }
@@ -396,6 +398,7 @@ class MainActivity : AppCompatActivity() {
             else -> ""
         }
         tvDelay.text = "Phone Sync: ${sign}${offsetMs}ms"
+        findViewById<TextView>(R.id.tv_tb_delay).text = "%s%.1fs".format(sign, offsetMs / 1000.0)
     }
 
     private fun renderSyncedLyrics(state: LyricsState) {

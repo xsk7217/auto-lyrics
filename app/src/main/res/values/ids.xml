@@ -2,4 +2,5 @@
 <resources>
     <!-- ThemeStyler: remembered text role of a TextView -->
     <item name="theme_role" type="id" />
+    <item name="theme_press" type="id" />
 </resources>

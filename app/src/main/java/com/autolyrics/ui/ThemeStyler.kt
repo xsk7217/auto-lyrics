@@ -4,7 +4,10 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
+import android.view.MotionEvent
 import android.view.View
+import android.view.animation.OvershootInterpolator
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CompoundButton
@@ -59,7 +62,12 @@ object ThemeStyler {
 
     fun styleChip(button: MaterialButton, p: Palette, selected: Boolean) {
         val d = button.resources.displayMetrics.density
-        button.backgroundTintList = ColorStateList.valueOf(if (selected) p.chip else p.card)
+        button.backgroundTintList = ColorStateList(
+            arrayOf(intArrayOf(android.R.attr.state_pressed), intArrayOf()),
+            intArrayOf(p.chipBorder, if (selected) p.chip else p.card)
+        )
+        button.rippleColor = ColorStateList.valueOf(withAlpha(p.accent, 0.35f))
+        addPressFeedback(button)
         button.strokeColor = ColorStateList.valueOf(if (selected) p.chipBorder else p.border)
         button.strokeWidth = (1 * d).toInt().coerceAtLeast(1)
         button.cornerRadius = (18 * d).toInt()
@@ -100,11 +108,41 @@ object ThemeStyler {
                 view.backgroundTintList = ColorStateList.valueOf(p.chipBorder)
             }
             is TextView -> view.setTextColor(colorFor(view, tag, p))
-            is ImageButton -> view.imageTintList = ColorStateList.valueOf(p.sub)
+            is ImageButton -> {
+                view.imageTintList = ColorStateList.valueOf(p.sub)
+                // Round ripple in the accent color instead of the faint default one.
+                val mask = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.WHITE) }
+                view.background = RippleDrawable(
+                    ColorStateList.valueOf(withAlpha(p.accent, 0.4f)),
+                    GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(p.card) },
+                    mask
+                )
+                addPressFeedback(view)
+            }
         }
 
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) style(view.getChildAt(i), p)
+        }
+    }
+
+    private fun withAlpha(color: Int, alpha: Float) =
+        Color.argb((alpha * 255).toInt(), Color.red(color), Color.green(color), Color.blue(color))
+
+    /** Shrinks a little while pressed and springs back: a clearly visible tap. */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun addPressFeedback(view: View) {
+        if (view.getTag(R.id.theme_press) == true) return
+        view.setTag(R.id.theme_press, true)
+        view.setOnTouchListener { v, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN ->
+                    v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(80).start()
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(160)
+                        .setInterpolator(OvershootInterpolator(3f)).start()
+            }
+            false
         }
     }
 
