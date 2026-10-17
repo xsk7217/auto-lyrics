@@ -171,6 +171,11 @@
         <Button
             android:id="@+id/btn_tb_delay_minus"
             style="@style/AL.Chip"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
+            android:textSize="20sp"
             android:layout_marginEnd="0dp"
             android:contentDescription="歌詞提早 0.5 秒"
             android:text="−" />
@@ -179,7 +184,7 @@
             android:id="@+id/tv_tb_delay"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:minWidth="52dp"
+            android:minWidth="48dp"
             android:gravity="center"
             android:text="0.0s"
             android:textColor="#8888AA"
@@ -188,6 +193,11 @@
         <Button
             android:id="@+id/btn_tb_delay_plus"
             style="@style/AL.Chip"
+            android:layout_width="48dp"
+            android:layout_height="44dp"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
+            android:textSize="20sp"
             android:contentDescription="歌詞延後 0.5 秒"
             android:text="+" />
 
@@ -204,12 +214,14 @@
         <ImageButton
             android:id="@+id/btn_switch_source"
             style="@style/AL.IconButton"
+            android:layout_marginStart="2dp"
             android:src="@drawable/ic_refresh"
             android:contentDescription="換來源重抓歌詞" />
 
         <ImageButton
             android:id="@+id/btn_settings_toggle"
             style="@style/AL.IconButton"
+            android:layout_marginStart="8dp"
             android:src="@drawable/ic_settings"
             android:contentDescription="顯示設定" />
     </LinearLayout>
@@ -265,7 +277,7 @@
                     android:id="@+id/tv_font_size"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:minWidth="52dp"
+                    android:minWidth="48dp"
                     android:gravity="center"
                     android:text="16sp"
                     android:textColor="#CCCCDD"
