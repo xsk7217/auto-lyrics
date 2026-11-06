@@ -183,6 +183,7 @@ class MediaTracker private constructor(context: Context) {
     }
 
     fun onMediaSessionChanged(controller: MediaController?) {
+        if (controller != null && controller.sessionToken == activeController?.sessionToken) return
         activeController?.unregisterCallback(mediaCallback)
         activeController = controller
 
@@ -289,7 +290,9 @@ class MediaTracker private constructor(context: Context) {
     private fun handlePlaybackStateChanged(pbState: PlaybackState?) {
         if (pbState == null) return
 
-        val isPlaying = pbState.state == PlaybackState.STATE_PLAYING
+        // Buffering / skipping between songs is still "playing" to the listener;
+        // reporting it as paused made Android Auto flip its media card around.
+        val isPlaying = pbState.state in PLAYING_STATES
         lastPositionMs = pbState.position
         lastPositionUpdateTime = pbState.lastPositionUpdateTime
         if (lastPositionUpdateTime == 0L) {
@@ -548,6 +551,16 @@ class MediaTracker private constructor(context: Context) {
     companion object {
         private const val CACHE_REFRESH_MS = 7L * 24 * 60 * 60 * 1000
         const val PREF_TRADITIONAL = "convert_traditional"
+        private val PLAYING_STATES = setOf(
+            PlaybackState.STATE_PLAYING,
+            PlaybackState.STATE_BUFFERING,
+            PlaybackState.STATE_CONNECTING,
+            PlaybackState.STATE_FAST_FORWARDING,
+            PlaybackState.STATE_REWINDING,
+            PlaybackState.STATE_SKIPPING_TO_NEXT,
+            PlaybackState.STATE_SKIPPING_TO_PREVIOUS,
+            PlaybackState.STATE_SKIPPING_TO_QUEUE_ITEM
+        )
         const val PREF_TRANSLATION = "translation_enabled"
         const val PREF_TRANSLATION_TARGET = "translation_target"
         const val PREF_TITLE_GUARD = "title_change_guard"

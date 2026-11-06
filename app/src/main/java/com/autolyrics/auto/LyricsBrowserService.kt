@@ -134,6 +134,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         private const val BROWSE_KARAOKE_WINDOW_MS = 600L
         private const val SUBTITLE_KARAOKE_WINDOW_MS = 300L
         private const val SESSION_REFRESH_MS = 1500L
+        private const val POSITION_DRIFT_MS = 2000L
         private const val PLAIN_LOOP_DELAY_MS = 2000L
     }
 
@@ -185,7 +186,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
                 val state = mediaTracker.state.value
                 if (state.isPlaying && state.track != null) {
                     mediaSession.isActive = true
-                    mediaSession.setPlaybackState(buildPlaybackState(state))
+                    pushPlaybackState(state)
                 }
             }
         }
@@ -760,8 +761,8 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         applyDisplayTexts(metaBuilder, texts)
         lastSubtitleText = "${texts.first}\u0000${texts.second}"
 
-        mediaSession.setMetadata(metaBuilder.build())
-        mediaSession.setPlaybackState(buildPlaybackState(state))
+        pushMetadata(state, texts, metaBuilder, force = trackChanged)
+        pushPlaybackState(state, force = trackChanged)
     }
 
     private fun updateSubtitleKaraoke() {
@@ -776,8 +777,45 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
 
         val metaBuilder = buildBaseMetadata(state)
         applyDisplayTexts(metaBuilder, texts)
-        mediaSession.setMetadata(metaBuilder.build())
-        mediaSession.setPlaybackState(buildPlaybackState(state))
+        pushMetadata(state, texts, metaBuilder)
+    }
+
+    // --- Only tell Android Auto about real changes ---
+    // Every update can make Android Auto switch its media card to this app, so
+    // re-sending the same thing makes it fight the player's own card (flicker).
+
+    private var sentMetaKey: String? = null
+    private var sentPbState = -1
+    private var sentPbPosition = 0L
+    private var sentPbAt = 0L
+
+    private fun pushMetadata(
+        state: LyricsState,
+        texts: Pair<String, String>,
+        builder: MediaMetadataCompat.Builder,
+        force: Boolean = false
+    ) {
+        val t = state.track
+        val art = state.albumArt ?: lastAlbumArt
+        val key = "${t?.title}\u0000${t?.artist}\u0000${t?.album}\u0000${t?.durationMs}\u0000" +
+            "${texts.first}\u0000${texts.second}\u0000${art?.let { System.identityHashCode(it) }}"
+        if (!force && key == sentMetaKey) return
+        sentMetaKey = key
+        mediaSession.setMetadata(builder.build())
+    }
+
+    /** Sends the playback state only when playing/paused changed or the position drifted 2 s. */
+    private fun pushPlaybackState(state: LyricsState, force: Boolean = false) {
+        val pb = buildPlaybackState(state)
+        val now = android.os.SystemClock.elapsedRealtime()
+        val expected = if (sentPbState == PlaybackStateCompat.STATE_PLAYING) {
+            sentPbPosition + (now - sentPbAt)
+        } else sentPbPosition
+        if (!force && pb.state == sentPbState && kotlin.math.abs(pb.position - expected) < POSITION_DRIFT_MS) return
+        sentPbState = pb.state
+        sentPbPosition = pb.position
+        sentPbAt = now
+        mediaSession.setPlaybackState(pb)
     }
 
     private fun buildPlaybackState(state: LyricsState): PlaybackStateCompat {
