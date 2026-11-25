@@ -1004,16 +1004,27 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         val elapsed = now - lastNotifyTime
 
         if (elapsed >= gap) {
+            handler.removeCallbacks(delayedNotify)
+            pendingNotify = false
             lastNotifyTime = now
             notifyLyricsPages()
-        } else if (!pendingNotify) {
-            pendingNotify = true
-            handler.postDelayed({
-                pendingNotify = false
-                lastNotifyTime = System.currentTimeMillis()
-                notifyLyricsPages()
-            }, gap - elapsed)
+        } else {
+            val due = lastNotifyTime + gap
+            // A new line pulls an already waiting (karaoke-only) refresh earlier.
+            if (!pendingNotify || due < pendingNotifyAt) {
+                handler.removeCallbacks(delayedNotify)
+                pendingNotify = true
+                pendingNotifyAt = due
+                handler.postDelayed(delayedNotify, due - now)
+            }
         }
+    }
+
+    private var pendingNotifyAt = 0L
+    private val delayedNotify = Runnable {
+        pendingNotify = false
+        lastNotifyTime = System.currentTimeMillis()
+        notifyLyricsPages()
     }
 
     // --- Transport controls ---

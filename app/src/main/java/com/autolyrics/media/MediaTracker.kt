@@ -254,7 +254,9 @@ class MediaTracker private constructor(context: Context) {
                 source = "",
                 translatedLines = null,
                 detectedLanguage = null,
-                translationStatus = null
+                translationStatus = null,
+                switchingSource = false,
+                switchMessage = null
             )
             fetchLyrics(newTrack)
             return
@@ -263,7 +265,8 @@ class MediaTracker private constructor(context: Context) {
         // Same media id as the song on screen: the player only rewrote its title /
         // artist (Morphe "MediaSession lyrics" puts each lyric line there).
         if (prefs.getBoolean(PREF_TITLE_GUARD, true) && current != null && !trackChangePending &&
-            mediaId != null && mediaId == currentMediaId
+            mediaId != null && mediaId == currentMediaId &&
+            newTrack.durationMs > 0 && newTrack.durationMs == current.durationMs
         ) {
             if (art != null && _state.value.albumArt == null) {
                 _state.value = _state.value.copy(albumArt = art)
@@ -314,11 +317,6 @@ class MediaTracker private constructor(context: Context) {
         handler.postDelayed(trackChangeRunnable, 600)
     }
 
-    /**
-     * Lyric-in-title players may also move the song name into the artist field,
-     * so only the duration (to the millisecond) and, when both have one, the
-     * album are compared. Two different songs practically never share both.
-     */
     /** [new] completes [old]: same title, and it adds the missing artist or duration. */
     private fun fillsIn(old: TrackInfo, new: TrackInfo): Boolean {
         if (old.title != new.title) return false
@@ -331,6 +329,11 @@ class MediaTracker private constructor(context: Context) {
     private fun sameDuration(a: TrackInfo, b: TrackInfo): Boolean =
         a.durationMs <= 0 || b.durationMs <= 0 || kotlin.math.abs(a.durationMs - b.durationMs) <= 2_000
 
+    /**
+     * Lyric-in-title players may also move the song name into the artist field,
+     * so only the duration (to the millisecond) and, when both have one, the
+     * album are compared. Two different songs practically never share both.
+     */
     private fun isSameSong(a: TrackInfo, b: TrackInfo): Boolean {
         if (a.durationMs <= 0 || a.durationMs != b.durationMs) return false
         if (a.album.isNotBlank() && b.album.isNotBlank() && a.album != b.album) return false

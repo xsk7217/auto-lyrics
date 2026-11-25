@@ -47,10 +47,13 @@ class MediaListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        // Only Pixel "Now Playing" results matter here; session changes come
-        // through the active-sessions listener (re-picking on every
-        // notification from every app was wasted work and could jump players).
+        // Pixel "Now Playing" results, plus a re-pick when a *media* notification
+        // changes (another player starting). Other apps' notifications are ignored:
+        // re-picking on all of them was wasted work and could jump players.
         sbn?.let { RecognizedSongs.onNotification(this, it) }
+        if (sbn?.notification?.extras?.containsKey(android.app.Notification.EXTRA_MEDIA_SESSION) == true) {
+            updateSessions()
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {}

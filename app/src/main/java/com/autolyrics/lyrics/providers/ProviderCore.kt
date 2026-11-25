@@ -155,9 +155,15 @@ internal object TrackMatcher {
         return base.ifBlank { NOISE.replace(simplified, "") }
     }
 
+    /** " - Remastered 2011", " - Live", " - Radio Edit"…: same song, different release. */
+    private val RELEASE_SUFFIX = Regex(
+        """\s+[-–—]\s+[^-–—]*\b(?:remaster(?:ed)?|live|version|edit|mix|mono|stereo|acoustic|demo|single|deluxe)\b[^-–—]*$""",
+        RegexOption.IGNORE_CASE
+    )
+
     private fun titleOk(trackTitle: String, candTitle: String, exact: Boolean = false): Boolean {
-        val a = norm(trackTitle)
-        val b = norm(candTitle)
+        val a = norm(RELEASE_SUFFIX.replace(trackTitle, ""))
+        val b = norm(RELEASE_SUFFIX.replace(candTitle, ""))
         if (a.isEmpty() || b.isEmpty()) return false
         if (a == b) return true
         if (exact) return false

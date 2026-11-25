@@ -46,7 +46,7 @@ object ChineseConverter {
 
     fun toSimplified(text: String): String = apply(toSimplified, text)
 
-    private val KANA = Regex("[\u3040-\u30FF]")
+    private val KANA = Regex("[\u3040-\u309F\u30A0-\u30FA\u30FC-\u30FF]")
 
     /** Japanese lyrics (any kana) are left as they are: 気 must not become 氣. */
     fun linesToTraditional(lines: List<LyricLine>): List<LyricLine> {
