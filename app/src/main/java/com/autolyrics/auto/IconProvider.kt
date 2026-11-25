@@ -26,15 +26,52 @@ class IconProvider : ContentProvider() {
 
         fun uri(context: Context, name: String): String =
             "content://${context.packageName}.icons/$name.png"
+
+        private const val ART_MAX_PX = 512
+        private const val ART_KEEP = 3
+        private val ART_NAME = Regex("""^art_\d+\.jpg$""")
+        private var artCounter = 0
+
+        /**
+         * Saves the current song's cover and returns a content:// URI for it.
+         * Android Auto loads artwork from a URI once, instead of receiving the
+         * whole bitmap with every metadata update.
+         */
+        @Synchronized
+        fun saveArt(context: Context, art: Bitmap): String? = try {
+            val dir = File(context.cacheDir, "aa_art").apply { mkdirs() }
+            val scale = ART_MAX_PX.toFloat() / maxOf(art.width, art.height)
+            val small = if (scale < 1f) {
+                Bitmap.createScaledBitmap(art, (art.width * scale).toInt().coerceAtLeast(1), (art.height * scale).toInt().coerceAtLeast(1), true)
+            } else art
+            // Digits only, so the name matches ART_NAME and sorts by time.
+            val name = "art_${System.currentTimeMillis()}${artCounter++ % 10}.jpg"
+            val tmp = File(dir, "$name.tmp")
+            tmp.outputStream().use { small.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+            tmp.renameTo(File(dir, name))
+            // Keep only the newest few.
+            dir.listFiles { f -> ART_NAME.matches(f.name) }?.sortedByDescending { it.name }
+                ?.drop(ART_KEEP)?.forEach { it.delete() }
+            "content://${context.packageName}.icons/$name"
+        } catch (_: Exception) {
+            null
+        }
     }
 
     override fun onCreate() = true
 
-    override fun getType(uri: Uri) = "image/png"
+    override fun getType(uri: Uri) =
+        if (uri.lastPathSegment?.endsWith(".jpg") == true) "image/jpeg" else "image/png"
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
         val context = context ?: throw FileNotFoundException()
-        val name = uri.lastPathSegment?.removeSuffix(".png")
+        val segment = uri.lastPathSegment ?: throw FileNotFoundException()
+        if (ART_NAME.matches(segment)) {
+            val art = File(File(context.cacheDir, "aa_art"), segment)
+            if (!art.exists()) throw FileNotFoundException(segment)
+            return ParcelFileDescriptor.open(art, ParcelFileDescriptor.MODE_READ_ONLY)
+        }
+        val name = segment.removeSuffix(".png")
         val resId = ICONS[name] ?: throw FileNotFoundException(uri.toString())
         val file = File(File(context.cacheDir, "aa_icons").apply { mkdirs() }, "$name.png")
         if (!file.exists()) {
@@ -42,7 +79,10 @@ class IconProvider : ContentProvider() {
             val bitmap = Bitmap.createBitmap(SIZE_PX, SIZE_PX, Bitmap.Config.ARGB_8888)
             drawable.setBounds(0, 0, SIZE_PX, SIZE_PX)
             drawable.draw(Canvas(bitmap))
-            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            // Write to a temporary file first: two readers never see half a PNG.
+            val tmp = File(file.parentFile, "$name.${System.nanoTime()}.tmp")
+            tmp.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            if (!tmp.renameTo(file)) tmp.delete()
         }
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
     }

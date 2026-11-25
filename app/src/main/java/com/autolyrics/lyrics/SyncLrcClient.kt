@@ -34,7 +34,10 @@ object SyncLrcClient {
 
     data class SyncLrcResult(
         val lyrics: String,
-        val type: LyricsType
+        val type: LyricsType,
+        /** What the server says it matched (may be null). */
+        val track: String?,
+        val artist: String?
     )
 
     fun getLyrics(trackName: String, artistName: String): SyncLrcResult? {
@@ -74,7 +77,7 @@ object SyncLrcClient {
                     "plain" -> LyricsType.PLAIN
                     else -> type
                 }
-                SyncLrcResult(lyrics, actualType)
+                SyncLrcResult(lyrics, actualType, parsed.track, parsed.artist)
             }
         } catch (_: Exception) {
             null

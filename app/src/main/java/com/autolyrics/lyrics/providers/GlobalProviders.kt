@@ -24,13 +24,21 @@ object LrcLibProvider : LyricsProvider {
     override fun fetch(track: TrackInfo): LyricsResult? {
         val durationSec = if (track.durationMs > 0) (track.durationMs / 1000).toInt() else 0
         val result = try {
-            LrcLibClient.getLyrics(track.title, track.artist, track.album, durationSec)
+            LrcLibClient.getLyrics(track.title, track.artist, track.album, durationSec) { r ->
+                val candidate = Candidate(
+                    title = r.trackName.orEmpty(),
+                    artists = listOfNotNull(r.artistName),
+                    durationMs = ((r.duration ?: 0.0) * 1000).toLong(),
+                    payload = Unit
+                )
+                TrackMatcher.rank(track, listOf(candidate)).isNotEmpty()
+            }
         } catch (_: Exception) {
             null
         } ?: return null
 
         result.syncedLyrics?.let { synced ->
-            val lines = LrcParser.parse(synced)
+            val lines = LrcParser.parse(LyricsResults.normalizeLrc(synced))
             if (LyricsResults.hasRealText(lines)) return LyricsResult(lines, LyricsStatus.FOUND, "LRCLIB · Synced")
         }
         return LyricsResults.fromPlain(result.plainLyrics, "LRCLIB")
@@ -44,11 +52,22 @@ object SyncLrcProvider : LyricsProvider {
     override val description = "逐字（卡拉 OK）歌詞，原版 Auto Lyrics 內建來源"
 
     override fun fetch(track: TrackInfo): LyricsResult? {
+        // SyncLRC gives no duration, so without an artist nothing can be verified.
+        if (track.artist.isBlank()) return null
         val result = try {
             SyncLrcClient.getLyrics(track.title, track.artist)
         } catch (_: Exception) {
             null
         } ?: return null
+        if (result.track != null || result.artist != null) {
+            val candidate = Candidate(
+                title = result.track.orEmpty(),
+                artists = listOfNotNull(result.artist),
+                durationMs = 0L,
+                payload = Unit
+            )
+            if (TrackMatcher.rank(track, listOf(candidate)).isEmpty()) return null
+        }
 
         return when (result.type) {
             SyncLrcClient.LyricsType.KARAOKE -> {
@@ -56,7 +75,7 @@ object SyncLrcProvider : LyricsProvider {
                 if (LyricsResults.hasRealText(lines)) LyricsResult(lines, LyricsStatus.FOUND, "SyncLRC · Karaoke") else null
             }
             SyncLrcClient.LyricsType.SYNCED -> {
-                val lines = LrcParser.parse(result.lyrics)
+                val lines = LrcParser.parse(LyricsResults.normalizeLrc(result.lyrics))
                 if (LyricsResults.hasRealText(lines)) LyricsResult(lines, LyricsStatus.FOUND, "SyncLRC · Synced") else null
             }
             SyncLrcClient.LyricsType.PLAIN -> LyricsResults.fromPlain(result.lyrics, "SyncLRC")

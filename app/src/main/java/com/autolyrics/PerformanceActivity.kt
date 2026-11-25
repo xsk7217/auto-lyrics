@@ -2,6 +2,7 @@ package com.autolyrics
 
 import android.animation.ValueAnimator
 import android.graphics.Color
+import com.autolyrics.lyrics.LrcParser
 import com.autolyrics.ui.Palette
 import com.autolyrics.ui.ThemeStyler
 import com.autolyrics.ui.Themes
@@ -49,6 +50,7 @@ class PerformanceActivity : AppCompatActivity() {
     private lateinit var palette: Palette
     private var lastRenderedIndex = -1
     private var lastRenderedWord = -1
+    private var lastLines: List<com.autolyrics.model.LyricLine>? = null
     private var wordPopAnimator: ValueAnimator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,6 +101,12 @@ class PerformanceActivity : AppCompatActivity() {
     }
 
     private fun render(state: LyricsState) {
+        // New song / new source / not showing synced lines: draw everything again next time.
+        if (state.status != LyricsStatus.FOUND || state.lines !== lastLines) {
+            lastRenderedIndex = -1
+            lastRenderedWord = -1
+            lastLines = state.lines
+        }
         state.track?.let { track ->
             trackTitle.text = track.title
             trackArtist.text = track.artist.ifBlank { "" }
@@ -183,6 +191,8 @@ class PerformanceActivity : AppCompatActivity() {
         val lines = state.lines
 
         if (idx < 0 || idx >= lines.size) {
+            lastRenderedIndex = -1
+            lastRenderedWord = -1
             prevLine.text = ""
             currentLine.text = "♪"
             nextLine.text = ""
@@ -249,7 +259,9 @@ class PerformanceActivity : AppCompatActivity() {
                 ssb.setSpan(BackgroundColorSpan(accentBg), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
 
-            if (wi < line.words.size - 1) ssb.append(" ")
+            if (wi < line.words.size - 1 &&
+                LrcParser.needsSpace(word.text.lastOrNull() ?: ' ', line.words[wi + 1].text.firstOrNull() ?: ' ')
+            ) ssb.append(" ")
         }
         return ssb
     }
@@ -264,7 +276,6 @@ class PerformanceActivity : AppCompatActivity() {
     }
 
     companion object {
-        private val DEFAULT_ACCENT = Color.parseColor("#FFD54F")
 
         private fun setAlpha(color: Int, alpha: Float): Int {
             val a = (alpha * 255).toInt().coerceIn(0, 255)

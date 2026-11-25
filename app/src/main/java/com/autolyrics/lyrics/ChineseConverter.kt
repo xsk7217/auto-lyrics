@@ -46,10 +46,16 @@ object ChineseConverter {
 
     fun toSimplified(text: String): String = apply(toSimplified, text)
 
-    fun linesToTraditional(lines: List<LyricLine>): List<LyricLine> = lines.map { line ->
-        line.copy(
-            text = toTraditional(line.text),
-            words = line.words.map { w -> LyricWord(w.timeMs, toTraditional(w.text)) }
-        )
+    private val KANA = Regex("[\u3040-\u30FF]")
+
+    /** Japanese lyrics (any kana) are left as they are: 気 must not become 氣. */
+    fun linesToTraditional(lines: List<LyricLine>): List<LyricLine> {
+        if (lines.any { KANA.containsMatchIn(it.text) }) return lines
+        return lines.map { line ->
+            line.copy(
+                text = toTraditional(line.text),
+                words = line.words.map { w -> LyricWord(w.timeMs, toTraditional(w.text)) }
+            )
+        }
     }
 }

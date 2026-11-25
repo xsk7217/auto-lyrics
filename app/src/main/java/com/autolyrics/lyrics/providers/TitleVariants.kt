@@ -82,7 +82,8 @@ internal object TitleVariants {
     fun cjkOnly(s: String): String {
         if (!s.any { isCjk(it) } || !LATIN_WORD.containsMatchIn(s)) return s
         val reduced = EDGE.replace(SPACES.replace(LATIN_WORD.replace(s, " "), " ").trim(), "")
-        return reduced.ifBlank { s }
+        // A single character ("愛 Love" → "愛") matches far too many songs.
+        return if (reduced.length < 2) s else reduced
     }
 
     /**

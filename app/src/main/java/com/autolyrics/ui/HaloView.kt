@@ -45,13 +45,29 @@ class HaloView @JvmOverloads constructor(
         invalidate()
     }
 
+    private var breathingWanted = false
+    private var shown = true
+
     /** Breathes while playing, rests dim when paused. */
     fun setBreathing(on: Boolean) {
-        if (on && !animator.isStarted) animator.start()
-        else if (!on && animator.isStarted) {
+        breathingWanted = on
+        update()
+    }
+
+    private fun update() {
+        val run = breathingWanted && shown
+        if (run && !animator.isStarted) animator.start()
+        else if (!run && animator.isStarted) {
             animator.cancel()
             setPhase(0f)
         }
+    }
+
+    /** Off screen: no animation (battery). */
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        shown = isVisible
+        update()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) = buildShader()

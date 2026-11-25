@@ -178,7 +178,7 @@
             android:paddingStart="0dp"
             android:paddingEnd="0dp"
             android:textSize="20sp"
-            android:contentDescription="歌詞提早 0.5 秒"
+            android:contentDescription="歌詞延後 0.5 秒"
             android:text="−" />
 
         <TextView
@@ -201,7 +201,7 @@
             android:paddingStart="0dp"
             android:paddingEnd="0dp"
             android:textSize="20sp"
-            android:contentDescription="歌詞延後 0.5 秒"
+            android:contentDescription="歌詞提早 0.5 秒"
             android:text="+" />
 
         <Button
@@ -213,6 +213,7 @@
             android:paddingStart="4dp"
             android:paddingEnd="4dp"
             android:maxLines="1"
+            android:ellipsize="end"
             android:text="全螢幕歌詞" />
 
         <ImageButton
@@ -365,10 +366,14 @@
                 android:layout_marginTop="8dp"
                 android:text="歌詞來源與進階設定 ›" />
 
-            <LinearLayout
+            <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
+                android:scrollbars="none">
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
                 <TextView
@@ -391,6 +396,7 @@
                 <Button android:id="@+id/btn_aa_delay_plus" style="@style/AL.Chip" android:text="+" />
                 <Button android:id="@+id/btn_aa_delay_reset" style="@style/AL.Chip" android:text="重設" />
             </LinearLayout>
+            </HorizontalScrollView>
 
             <View
                 android:layout_width="match_parent"
@@ -425,16 +431,21 @@
                     <Button android:id="@+id/btn_delay_reset" style="@style/AL.Chip" android:text="重設" />
                 </LinearLayout>
 
-                <LinearLayout
+                <HorizontalScrollView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
+                    android:scrollbars="none">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:orientation="horizontal">
                     <Button android:id="@+id/btn_quick_minus_1s" style="@style/AL.Chip" android:text="−1s" />
                     <Button android:id="@+id/btn_quick_minus_half" style="@style/AL.Chip" android:text="−0.5s" />
                     <Button android:id="@+id/btn_quick_plus_half" style="@style/AL.Chip" android:text="+0.5s" />
                     <Button android:id="@+id/btn_quick_plus_1s" style="@style/AL.Chip" android:text="+1s" />
                 </LinearLayout>
+                </HorizontalScrollView>
 
                 <Button
                     android:id="@+id/btn_tap_sync"

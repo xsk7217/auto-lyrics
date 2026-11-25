@@ -12,10 +12,11 @@ object MetadataCleaner {
     private val MULTI_SPACE = Regex("""\s{2,}""")
 
     fun cleanArtist(raw: String): String {
-        val primary = raw.split(Regex("""\s*[•·|]\s*""")).first().trim()
+        // First non-empty part of "Artist • Album" / "• Album" / "Artist - Song".
+        val primary = raw.split(Regex("""\s*[•·|]\s*""")).map { it.trim() }.firstOrNull { it.isNotEmpty() } ?: ""
         val noDash = primary.split(Regex("""\s+[-–—]\s+""")).first().trim()
         val cleaned = removeQualityTags(noDash)
-        return cleaned.ifBlank { raw.split(Regex("""\s*[•·|]\s*""")).first().trim() }
+        return cleaned.ifBlank { primary }
     }
 
     fun cleanTitle(raw: String): String {

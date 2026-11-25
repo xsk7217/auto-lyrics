@@ -5,23 +5,33 @@ import com.autolyrics.model.LyricLine
 import com.autolyrics.model.LyricWord
 import com.autolyrics.model.LyricsStatus
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import java.io.File
+import java.security.MessageDigest
 
+/**
+ * Lyrics stored on disk per (title, artist). Files are named by a SHA-1 of the
+ * key, and the key and song duration are stored inside, so a different song
+ * never gets another song's lyrics.
+ */
 class LyricsCache(context: Context) {
 
-    private val cacheDir = File(context.filesDir, "lyrics_cache")
+    private val cacheDir = File(context.filesDir, "lyrics_cache_v2")
     private val gson = Gson()
 
     init {
         cacheDir.mkdirs()
+        // The old cache (32-bit hash names, no duration) is dropped.
+        try { File(context.filesDir, "lyrics_cache").deleteRecursively() } catch (_: Exception) { }
     }
 
     data class CachedResult(
+        val key: String?,
         val lines: List<CachedLine>,
         val status: String,
         val source: String,
-        val timestamp: Long
+        val timestamp: Long,
+        /** Duration of the song the lyrics were checked against; 0 = not checked. */
+        val durationMs: Long = 0L
     )
 
     data class CachedLine(
@@ -35,13 +45,26 @@ class LyricsCache(context: Context) {
         val text: String
     )
 
-    fun get(title: String, artist: String): Triple<List<LyricLine>, LyricsStatus, String>? {
-        val file = cacheFile(title, artist)
+    data class Entry(
+        val lines: List<LyricLine>,
+        val status: LyricsStatus,
+        val source: String,
+        val ageMs: Long,
+        val durationMs: Long
+    )
+
+    /** Returns null when nothing is stored or the stored song has another duration. */
+    fun get(title: String, artist: String, durationMs: Long = 0L): Entry? {
+        val key = key(title, artist)
+        val file = cacheFile(key)
         if (!file.exists()) return null
 
         return try {
-            val json = file.readText()
-            val cached = gson.fromJson(json, CachedResult::class.java)
+            val cached = gson.fromJson(file.readText(), CachedResult::class.java)
+            if (cached.key != key) return null
+            if (durationMs > 0 && cached.durationMs > 0 &&
+                kotlin.math.abs(durationMs - cached.durationMs) > DURATION_TOLERANCE_MS
+            ) return null
             val status = try {
                 LyricsStatus.valueOf(cached.status)
             } catch (_: Exception) {
@@ -54,16 +77,25 @@ class LyricsCache(context: Context) {
                     words = cl.words.map { cw -> LyricWord(cw.timeMs, cw.text) }
                 )
             }
-            Triple(lines, status, cached.source)
+            Entry(lines, status, cached.source, System.currentTimeMillis() - cached.timestamp, cached.durationMs)
         } catch (_: Exception) {
             file.delete()
             null
         }
     }
 
-    fun put(title: String, artist: String, lines: List<LyricLine>, status: LyricsStatus, source: String) {
+    fun put(
+        title: String,
+        artist: String,
+        lines: List<LyricLine>,
+        status: LyricsStatus,
+        source: String,
+        durationMs: Long = 0L
+    ) {
         try {
+            val key = key(title, artist)
             val cached = CachedResult(
+                key = key,
                 lines = lines.map { line ->
                     CachedLine(
                         timeMs = line.timeMs,
@@ -73,38 +105,31 @@ class LyricsCache(context: Context) {
                 },
                 status = status.name,
                 source = source,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                durationMs = durationMs
             )
-            val file = cacheFile(title, artist)
-            file.writeText(gson.toJson(cached))
+            cacheFile(key).writeText(gson.toJson(cached))
         } catch (_: Exception) {
             // cache write failures are non-fatal
         }
     }
 
-    fun getAge(title: String, artist: String): Long {
-        val file = cacheFile(title, artist)
-        if (!file.exists()) return Long.MAX_VALUE
-        return try {
-            val json = file.readText()
-            val cached = gson.fromJson(json, CachedResult::class.java)
-            System.currentTimeMillis() - cached.timestamp
-        } catch (_: Exception) {
-            Long.MAX_VALUE
-        }
-    }
-
     fun remove(title: String, artist: String) {
-        try { cacheFile(title, artist).delete() } catch (_: Exception) { }
+        try { cacheFile(key(title, artist)).delete() } catch (_: Exception) { }
     }
 
     fun clear() {
         try { cacheDir.listFiles()?.forEach { it.delete() } } catch (_: Exception) { }
     }
 
-    private fun cacheFile(title: String, artist: String): File {
-        val key = "${title.lowercase().trim()}|${artist.lowercase().trim()}"
-        val hash = key.hashCode().toUInt().toString(16)
-        return File(cacheDir, "$hash.json")
+    private fun key(title: String, artist: String) = "${title.lowercase().trim()}|${artist.lowercase().trim()}"
+
+    private fun cacheFile(key: String): File {
+        val digest = MessageDigest.getInstance("SHA-1").digest(key.toByteArray(Charsets.UTF_8))
+        return File(cacheDir, digest.joinToString("") { "%02x".format(it) } + ".json")
+    }
+
+    companion object {
+        private const val DURATION_TOLERANCE_MS = 3_000L
     }
 }

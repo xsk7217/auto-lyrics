@@ -51,6 +51,9 @@ class MediaTracker private constructor(context: Context) {
     private var triedForTrack: TrackInfo? = null
     private var pendingTrack: TrackInfo? = null
     private var pendingArt: Bitmap? = null
+    /** Player's id of the song shown / about to be shown (YT Music: the video id). */
+    private var currentMediaId: String? = null
+    private var pendingMediaId: String? = null
     private var trackChangePending = false
     private var lyricsOffsetMs: Long = 0L
 
@@ -71,9 +74,10 @@ class MediaTracker private constructor(context: Context) {
     private val trackChangeRunnable = Runnable {
         trackChangePending = false
         val track = pendingTrack ?: return@Runnable
+        currentMediaId = pendingMediaId
         val art = pendingArt
         val current = _state.value.track
-        if (track.title == current?.title && track.artist == current.artist) return@Runnable
+        if (track.title == current?.title && track.artist == current.artist && sameDuration(track, current)) return@Runnable
 
         translationJob?.cancel()
         _state.value = _state.value.copy(
@@ -139,7 +143,9 @@ class MediaTracker private constructor(context: Context) {
             lastPositionMs
         } else {
             val elapsed = SystemClock.elapsedRealtime() - lastPositionUpdateTime
-            lastPositionMs + (elapsed * playbackSpeed).toLong()
+            val pos = lastPositionMs + (elapsed * playbackSpeed).toLong()
+            val duration = _state.value.track?.durationMs ?: 0L
+            if (duration > 0) pos.coerceAtMost(duration) else pos
         }
         return basePos + lyricsOffsetMs
     }
@@ -183,6 +189,7 @@ class MediaTracker private constructor(context: Context) {
     }
 
     fun onMediaSessionChanged(controller: MediaController?) {
+        if (controller != null && controller.sessionToken == activeController?.sessionToken) return
         activeController?.unregisterCallback(mediaCallback)
         activeController = controller
 
@@ -191,6 +198,7 @@ class MediaTracker private constructor(context: Context) {
             handler.removeCallbacks(trackChangeRunnable)
             trackChangePending = false
             artJob?.cancel()
+            currentMediaId = null
             _state.value = LyricsState(offsetMs = lyricsOffsetMs)
             return
         }
@@ -203,11 +211,14 @@ class MediaTracker private constructor(context: Context) {
     private fun handleMetadataChanged(metadata: MediaMetadata?) {
         if (metadata == null) return
 
-        val rawTitle = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
-            ?: metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+        // An empty string must fall through too (YT Music sometimes sends "" first).
+        fun field(key: String) = metadata.getString(key)?.takeIf { it.isNotBlank() }
+        val rawTitle = field(MediaMetadata.METADATA_KEY_TITLE)
+            ?: field(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
             ?: return
-        val rawArtist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
-            ?: metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+        val rawArtist = field(MediaMetadata.METADATA_KEY_ARTIST)
+            ?: field(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+            ?: field(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
             ?: ""
         val rawAlbum = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: ""
         val duration = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
@@ -221,6 +232,45 @@ class MediaTracker private constructor(context: Context) {
 
         val newTrack = TrackInfo(title, artist, album, duration)
         val current = _state.value.track
+        val mediaId = field(MediaMetadata.METADATA_KEY_MEDIA_ID)
+
+        // The artist (or duration) arrived after the title: same song, now
+        // searchable properly. Replace the half-known track and look up again.
+        val waiting = pendingTrack
+        if (trackChangePending && waiting != null && fillsIn(waiting, newTrack)) {
+            pendingTrack = newTrack
+            if (art != null) pendingArt = art
+            return
+        }
+        if (current != null && fillsIn(current, newTrack)) {
+            fetchJob?.cancel()
+            translationJob?.cancel()
+            _state.value = _state.value.copy(
+                track = newTrack,
+                lines = emptyList(),
+                currentIndex = -1,
+                currentWordIndex = -1,
+                status = LyricsStatus.LOADING,
+                source = "",
+                translatedLines = null,
+                detectedLanguage = null,
+                translationStatus = null
+            )
+            fetchLyrics(newTrack)
+            return
+        }
+
+        // Same media id as the song on screen: the player only rewrote its title /
+        // artist (Morphe "MediaSession lyrics" puts each lyric line there).
+        if (prefs.getBoolean(PREF_TITLE_GUARD, true) && current != null && !trackChangePending &&
+            mediaId != null && mediaId == currentMediaId
+        ) {
+            if (art != null && _state.value.albumArt == null) {
+                _state.value = _state.value.copy(albumArt = art)
+                extractAlbumColors(art)
+            }
+            return
+        }
 
         // Some players (e.g. YT Music patched with Morphe "Third-party lyrics") write the
         // current lyric line into the title field. Same duration/album while the song
@@ -246,7 +296,9 @@ class MediaTracker private constructor(context: Context) {
             }
         }
 
-        if (current != null && newTrack.title == current.title && newTrack.artist == current.artist) {
+        if (current != null && newTrack.title == current.title && newTrack.artist == current.artist &&
+            sameDuration(newTrack, current)
+        ) {
             if (art != null && _state.value.albumArt == null) {
                 _state.value = _state.value.copy(albumArt = art)
                 extractAlbumColors(art)
@@ -256,6 +308,7 @@ class MediaTracker private constructor(context: Context) {
 
         pendingTrack = newTrack
         pendingArt = art
+        pendingMediaId = mediaId
         handler.removeCallbacks(trackChangeRunnable)
         trackChangePending = true
         handler.postDelayed(trackChangeRunnable, 600)
@@ -266,6 +319,18 @@ class MediaTracker private constructor(context: Context) {
      * so only the duration (to the millisecond) and, when both have one, the
      * album are compared. Two different songs practically never share both.
      */
+    /** [new] completes [old]: same title, and it adds the missing artist or duration. */
+    private fun fillsIn(old: TrackInfo, new: TrackInfo): Boolean {
+        if (old.title != new.title) return false
+        val addsArtist = old.artist.isBlank() && new.artist.isNotBlank()
+        val addsDuration = old.durationMs <= 0 && new.durationMs > 0 && (old.artist == new.artist || addsArtist)
+        return (addsArtist && sameDuration(old, new)) || addsDuration
+    }
+
+    /** Equal, or one side doesn't know it yet. Two songs that share a name differ here. */
+    private fun sameDuration(a: TrackInfo, b: TrackInfo): Boolean =
+        a.durationMs <= 0 || b.durationMs <= 0 || kotlin.math.abs(a.durationMs - b.durationMs) <= 2_000
+
     private fun isSameSong(a: TrackInfo, b: TrackInfo): Boolean {
         if (a.durationMs <= 0 || a.durationMs != b.durationMs) return false
         if (a.album.isNotBlank() && b.album.isNotBlank() && a.album != b.album) return false
@@ -273,7 +338,11 @@ class MediaTracker private constructor(context: Context) {
     }
 
     /** Player position without the user's lyric offset. */
-    private fun rawPositionMs(): Long = getCurrentPositionMs() - lyricsOffsetMs
+    fun rawPositionMs(): Long = getCurrentPositionMs() - lyricsOffsetMs
+
+    /** The player session being followed (seek / skip must go to this one). */
+    val controller: MediaController?
+        get() = activeController
 
     private fun extractAlbumColors(bitmap: Bitmap?) {
         artJob?.cancel()
@@ -289,7 +358,10 @@ class MediaTracker private constructor(context: Context) {
     private fun handlePlaybackStateChanged(pbState: PlaybackState?) {
         if (pbState == null) return
 
-        val isPlaying = pbState.state == PlaybackState.STATE_PLAYING
+        // Buffering / skipping between songs is still "playing" to the listener.
+        // Reporting it as paused made our own session flip PAUSED → PLAYING on
+        // every buffer, which pulls Android Auto's media card over to this app.
+        val isPlaying = pbState.state in PLAYING_STATES
         lastPositionMs = pbState.position
         lastPositionUpdateTime = pbState.lastPositionUpdateTime
         if (lastPositionUpdateTime == 0L) {
@@ -309,10 +381,11 @@ class MediaTracker private constructor(context: Context) {
         fetchJob?.cancel()
         fetchJob = scope.launch(Dispatchers.IO) {
             try {
-                val cached = lyricsCache.get(track.title, track.artist)
+                val cached = lyricsCache.get(track.title, track.artist, track.durationMs)
                 if (cached != null) {
-                    val (rawLines, status, source) = cached
-                    val lines = finalizeLines(rawLines)
+                    val status = cached.status
+                    val source = cached.source
+                    val lines = finalizeLines(cached.lines)
                     withContext(Dispatchers.Main) {
                         if (_state.value.track != track) return@withContext
                         _state.value = _state.value.copy(
@@ -328,8 +401,10 @@ class MediaTracker private constructor(context: Context) {
                         translateIfNeeded(lines, track)
                     }
 
-                    val cacheAge = lyricsCache.getAge(track.title, track.artist)
-                    if (cacheAge < CACHE_REFRESH_MS) {
+                    // Prefetched entries were never checked against this song's
+                    // duration: show them, but look them up again.
+                    val verified = cached.durationMs > 0 || track.durationMs <= 0
+                    if (verified && cached.ageMs < CACHE_REFRESH_MS) {
                         prefetchNextSong()
                         return@launch
                     }
@@ -337,12 +412,14 @@ class MediaTracker private constructor(context: Context) {
 
                 val result = fetchFromProviders(track)
                 val displayLines = result?.let { finalizeLines(it.lines) }
+                if (result != null) {
+                    lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source, track.durationMs)
+                }
 
                 withContext(Dispatchers.Main) {
                     if (_state.value.track != track) return@withContext
 
                     if (result != null && displayLines != null) {
-                        lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source)
                         _state.value = _state.value.copy(
                             lines = displayLines,
                             currentIndex = -1,
@@ -402,6 +479,8 @@ class MediaTracker private constructor(context: Context) {
                         continue
                     }
 
+                    // Without an artist (and no duration here) nothing can be verified.
+                    if (artist.isBlank()) return@launch
                     if (lyricsCache.get(title, artist) != null) return@launch
 
                     val nextTrack = TrackInfo(title, artist, "", 0)
@@ -418,8 +497,10 @@ class MediaTracker private constructor(context: Context) {
     }
 
     /** Asks every enabled lyrics source, in the user's order. Raw (unconverted) lines. */
-    private fun fetchFromProviders(track: TrackInfo): LyricsResult? =
-        LyricsProviders.fetch(prefs, track)
+    private suspend fun fetchFromProviders(track: TrackInfo, exclude: Set<String> = emptySet()): LyricsResult? {
+        val ctx = currentCoroutineContext()
+        return LyricsProviders.fetch(prefs, track, exclude) { ctx.isActive }
+    }
 
     /** Applies display-time conversions (Simplified → Traditional Chinese). */
     private fun finalizeLines(lines: List<LyricLine>): List<LyricLine> =
@@ -458,16 +539,21 @@ class MediaTracker private constructor(context: Context) {
         val exclude = triedSources.toSet()
 
         switchJob?.cancel()
+        // A still-running normal lookup must not overwrite the chosen source later.
+        fetchJob?.cancel()
         _state.value = _state.value.copy(switchingSource = true, switchMessage = "換來源中…")
         switchJob = scope.launch(Dispatchers.IO) {
             val result = try {
-                LyricsProviders.fetch(prefs, track, exclude)
+                fetchFromProviders(track, exclude)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
                 null
             }
             val displayLines = result?.let { finalizeLines(it.lines) }
+            if (result != null) {
+                lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source, track.durationMs)
+            }
 
             withContext(Dispatchers.Main) {
                 if (_state.value.track != track) return@withContext
@@ -476,7 +562,6 @@ class MediaTracker private constructor(context: Context) {
                     val id = LyricsProviders.idForSource(result.source)
                     id?.let { triedSources += it }
                     message = "已改用 ${id?.let { LyricsProviders.displayName(it) } ?: result.source}"
-                    lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source)
                     translationJob?.cancel()
                     _state.value = _state.value.copy(
                         lines = displayLines,
@@ -548,6 +633,16 @@ class MediaTracker private constructor(context: Context) {
     companion object {
         private const val CACHE_REFRESH_MS = 7L * 24 * 60 * 60 * 1000
         const val PREF_TRADITIONAL = "convert_traditional"
+        private val PLAYING_STATES = setOf(
+            PlaybackState.STATE_PLAYING,
+            PlaybackState.STATE_BUFFERING,
+            PlaybackState.STATE_CONNECTING,
+            PlaybackState.STATE_FAST_FORWARDING,
+            PlaybackState.STATE_REWINDING,
+            PlaybackState.STATE_SKIPPING_TO_NEXT,
+            PlaybackState.STATE_SKIPPING_TO_PREVIOUS,
+            PlaybackState.STATE_SKIPPING_TO_QUEUE_ITEM
+        )
         const val PREF_TRANSLATION = "translation_enabled"
         const val PREF_TRANSLATION_TARGET = "translation_target"
         const val PREF_TITLE_GUARD = "title_change_guard"

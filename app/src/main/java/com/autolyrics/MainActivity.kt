@@ -33,6 +33,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.autolyrics.lyrics.LyricsTranslator
+import com.autolyrics.lyrics.LrcParser
 import com.autolyrics.media.MediaListenerService
 import com.autolyrics.media.MediaTracker
 import com.autolyrics.ui.HaloView
@@ -69,6 +70,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var switchAaKaraoke: SwitchCompat
     private lateinit var switchTranslation: SwitchCompat
     private lateinit var tvTranslationStatus: TextView
+    private val tvTbDelay: TextView by lazy { findViewById(R.id.tv_tb_delay) }
+    /** Start of each lyric line in tvLyrics' text, for exact auto-scroll. */
+    private val lineStarts = mutableListOf<Int>()
+    private var plainScrollGen = 0
     private lateinit var tvAaDelay: TextView
     private lateinit var btnJumpToCurrent: Button
     private lateinit var prefs: SharedPreferences
@@ -242,9 +247,11 @@ class MainActivity : AppCompatActivity() {
                 .setSingleChoiceItems(
                     LyricsTranslator.TARGETS.values.toTypedArray(), tags.indexOf(current).coerceAtLeast(0)
                 ) { dialog, which ->
-                    prefs.edit().putString(MediaTracker.PREF_TRANSLATION_TARGET, tags[which]).apply()
-                    showTarget()
-                    MediaTracker.getInstance(this).onTranslationSettingsChanged()
+                    if (tags[which] != current) {
+                        prefs.edit().putString(MediaTracker.PREF_TRANSLATION_TARGET, tags[which]).apply()
+                        showTarget()
+                        MediaTracker.getInstance(this).onTranslationSettingsChanged()
+                    }
                     dialog.dismiss()
                 }
                 .show()
@@ -291,7 +298,6 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 mediaTracker.state.collect { state ->
-                    updatePermissionUi()
                     updateDelayDisplay(state.offsetMs)
                     updateAlbumArt(state)
                     halo.setBreathing(state.isPlaying && ivAlbumArt.visibility == View.VISIBLE)
@@ -343,7 +349,7 @@ class MainActivity : AppCompatActivity() {
                             renderSyncedLyrics(state)
                         }
                         LyricsStatus.PLAIN_ONLY -> {
-                            stopPlainScroll()
+                            cancelPlainAnimator()
                             val hasTrans = state.translatedLines != null
                             val sb = SpannableStringBuilder()
                             sb.append("ℹ  Lyrics are not synced to playback\n\n")
@@ -398,7 +404,7 @@ class MainActivity : AppCompatActivity() {
             else -> ""
         }
         tvDelay.text = "Phone Sync: ${sign}${offsetMs}ms"
-        findViewById<TextView>(R.id.tv_tb_delay).text = "%s%.1fs".format(sign, offsetMs / 1000.0)
+        tvTbDelay.text = "%s%.1fs".format(sign, offsetMs / 1000.0)
     }
 
     private fun renderSyncedLyrics(state: LyricsState) {
@@ -408,9 +414,11 @@ class MainActivity : AppCompatActivity() {
         val highlightBg = palette.chip
         val dimColor = palette.dim
 
+        lineStarts.clear()
         state.lines.forEachIndexed { i, line ->
             val isCurrentLine = i == state.currentIndex
             val lineStart = ssb.length
+            lineStarts.add(lineStart)
 
             if (isCurrentLine) {
                 ssb.append("▶  ")
@@ -442,7 +450,9 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
 
-                    if (wi < line.words.size - 1) ssb.append(" ")
+                    if (wi < line.words.size - 1 &&
+                        LrcParser.needsSpace(word.text.lastOrNull() ?: ' ', line.words[wi + 1].text.firstOrNull() ?: ' ')
+                    ) ssb.append(" ")
                 }
                 ssb.setSpan(
                     StyleSpan(Typeface.BOLD),
@@ -503,6 +513,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         stopPlainScroll()
+        handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
@@ -514,6 +525,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             tvStatus.text = "⚠  Notification access required"
             tvStatus.setBackgroundResource(R.drawable.bg_status_warn)
+            tvStatus.setTextColor(android.graphics.Color.WHITE) // fixed dark background
             tvStatus.visibility = View.VISIBLE
             btnPermission.visibility = View.VISIBLE
         }
@@ -569,7 +581,14 @@ class MainActivity : AppCompatActivity() {
     private fun autoScrollToCurrentLine(currentIndex: Int, totalLines: Int) {
         if (totalLines == 0) return
         scrollView.post {
-            val targetY = (currentIndex.toFloat() / totalLines * tvLyrics.height).toInt()
+            // Real position of the line (wrapped lines and translations differ in height).
+            val layout = tvLyrics.layout
+            val start = lineStarts.getOrNull(currentIndex)
+            val targetY = if (layout != null && start != null && start <= tvLyrics.text.length) {
+                layout.getLineTop(layout.getLineForOffset(start)) + tvLyrics.paddingTop
+            } else {
+                (currentIndex.toFloat() / totalLines * tvLyrics.height).toInt()
+            }
             val offset = scrollView.height / 3
             scrollView.smoothScrollTo(0, maxOf(0, targetY - offset))
         }
@@ -683,7 +702,8 @@ class MainActivity : AppCompatActivity() {
             val targetLine = state.lines.getOrNull(tapSyncTargetLineIndex)
             if (targetLine != null && targetLine.timeMs > 0) {
                 val rawPos = getCurrentRawPositionMs()
-                val offset = rawPos - targetLine.timeMs
+                // Lines show at raw + offset >= timeMs; heard at raw → offset = timeMs - raw.
+                val offset = targetLine.timeMs - rawPos
                 tapSyncOffsets.add(offset)
             }
 
@@ -742,7 +762,10 @@ class MainActivity : AppCompatActivity() {
         val isNewTrack = trackTitle != lastPlainTrackTitle
         lastPlainTrackTitle = trackTitle
 
+        val gen = plainScrollGen
         tvLyrics.post {
+            // Stale: the lyrics changed (or became synced) before this ran.
+            if (gen != plainScrollGen || mediaTracker.state.value.status != LyricsStatus.PLAIN_ONLY) return@post
             val maxScroll = tvLyrics.height - scrollView.height
             if (maxScroll <= 0) return@post
 
@@ -773,9 +796,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopPlainScroll() {
+        cancelPlainAnimator()
+        lastPlainTrackTitle = null
+    }
+
+    private fun cancelPlainAnimator() {
+        plainScrollGen++
         plainScrollAnimator?.cancel()
         plainScrollAnimator = null
-        lastPlainTrackTitle = null
+    }
+
+    override fun onStop() {
+        // Nothing to animate while the screen isn't visible (battery).
+        plainScrollAnimator?.pause()
+        super.onStop()
     }
 
     companion object {

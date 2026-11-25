@@ -14,6 +14,7 @@ import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.media.MediaBrowserServiceCompat
 import com.autolyrics.media.MediaTracker
+import com.autolyrics.lyrics.LrcParser
 import com.autolyrics.model.LyricLine
 import com.autolyrics.model.LyricsState
 import com.autolyrics.model.LyricsStatus
@@ -109,6 +110,17 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         private const val PREF_CLIENT_INFO = "aa_client_info"
         private const val ACTION_JUMP = "com.autolyrics.action.JUMP_TO_LINE"
         private const val AA_PACKAGE = "com.google.android.projection.gearhead"
+        private val TRUSTED_CLIENTS = setOf(
+            AA_PACKAGE,
+            "com.android.systemui",
+            "com.android.bluetooth",
+            "com.google.android.bluetooth",
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.carassistant",
+            "com.android.car.media",
+            "com.google.android.apps.automotive.templates.host"
+        )
+        private const val KARAOKE_LIST_THROTTLE_MS = 1000L
         private const val JUMP_REFRESH_DELAY_MS = 400L
 
         // androidx.media.utils.MediaConstants (custom browse actions), as strings so
@@ -134,6 +146,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         private const val BROWSE_KARAOKE_WINDOW_MS = 600L
         private const val SUBTITLE_KARAOKE_WINDOW_MS = 300L
         private const val SESSION_REFRESH_MS = 1500L
+        private const val POSITION_DRIFT_MS = 2000L
         private const val PLAIN_LOOP_DELAY_MS = 2000L
     }
 
@@ -185,7 +198,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
                 val state = mediaTracker.state.value
                 if (state.isPlaying && state.track != null) {
                     mediaSession.isActive = true
-                    mediaSession.setPlaybackState(buildPlaybackState(state))
+                    pushPlaybackState(state)
                 }
             }
         }
@@ -194,17 +207,31 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
     override fun onDestroy() {
         getSharedPreferences("auto_lyrics_prefs", MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefsListener)
+        handler.removeCallbacksAndMessages(null)
         scope.cancel()
         mediaSession.isActive = false
         mediaSession.release()
         super.onDestroy()
     }
 
+    /**
+     * Only Android Auto, the system and Bluetooth may browse: through this
+     * service a client can seek / skip the music app and change settings.
+     */
+    private fun isTrustedClient(pkg: String, uid: Int): Boolean {
+        if (uid == android.os.Process.myUid() || uid == android.os.Process.SYSTEM_UID) return true
+        if (pkg !in TRUSTED_CLIENTS) return false
+        // The package name must really belong to the calling uid (no spoofing).
+        val owned = try { packageManager.getPackagesForUid(uid) } catch (_: Exception) { null }
+        return owned?.contains(pkg) == true
+    }
+
     override fun onGetRoot(
         clientPackageName: String,
         clientUid: Int,
         rootHints: Bundle?
-    ): BrowserRoot {
+    ): BrowserRoot? {
+        if (!isTrustedClient(clientPackageName, clientUid)) return null
         val limit = rootHints?.getInt(KEY_ACTION_LIMIT, 0) ?: 0
         // Other media clients connect too: any client offering actions turns them on,
         // only Android Auto itself can turn them off.
@@ -259,7 +286,9 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         val state = mediaTracker.state.value
         if (state.status != LyricsStatus.FOUND) return
         val line = state.lines.getOrNull(index) ?: return
-        getActiveMediaController()?.transportControls?.seekTo(line.timeMs.coerceAtLeast(0))
+        // Lines show at raw + phone offset + AA offset >= timeMs, so seek to the raw time.
+        val target = (line.timeMs - state.offsetMs - aaOffsetMs).coerceAtLeast(0)
+        getActiveMediaController()?.transportControls?.seekTo(target)
         handler.postDelayed({ forceRefresh() }, JUMP_REFRESH_DELAY_MS)
     }
 
@@ -639,11 +668,15 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             if (i == currentIdx) sb.append("【")
             sb.append(words[i].text)
             if (i == endIdx) sb.append("】")
-            if (i < words.size - 1) sb.append(" ")
+            if (i < words.size - 1 && spaceBetween(words[i].text, words[i + 1].text)) sb.append(" ")
         }
         lastKaraokeText = sb.toString()
         return lastKaraokeText!!
     }
+
+    /** Karaoke pieces: a space between Latin words, none inside Chinese / Japanese. */
+    private fun spaceBetween(a: String, b: String): Boolean =
+        a.isNotEmpty() && b.isNotEmpty() && LrcParser.needsSpace(a.last(), b.first())
 
     private fun resetKaraokeState() {
         lastKaraokeLineIdx = -1
@@ -725,12 +758,46 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         }
 
         val art = state.albumArt ?: lastAlbumArt
-        if (art != null) {
-            metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, art)
-            lastAlbumArt = art
+        if (art != null) lastAlbumArt = art
+        prepareArt(art)
+        val uri = artUri
+        if (uri != null) {
+            metaBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, uri)
+            metaBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, uri)
+        } else {
+            artSmall?.let { metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it) }
         }
 
         return metaBuilder
+    }
+
+    private var artSource: Bitmap? = null
+    private var artSmall: Bitmap? = null
+    private var artUri: String? = null
+
+    /**
+     * Once per cover: a small bitmap to show right away, then a content:// URI
+     * (Android Auto's recommended way) so later metadata updates carry no image.
+     */
+    private fun prepareArt(art: Bitmap?) {
+        if (art === artSource) return
+        artSource = art
+        artUri = null
+        artSmall = null
+        if (art == null) return
+        val scale = 320f / maxOf(art.width, art.height)
+        artSmall = if (scale < 1f) {
+            Bitmap.createScaledBitmap(art, (art.width * scale).toInt().coerceAtLeast(1), (art.height * scale).toInt().coerceAtLeast(1), true)
+        } else art
+        scope.launch(Dispatchers.IO) {
+            val uri = IconProvider.saveArt(this@LyricsBrowserService, art) ?: return@launch
+            withContext(Dispatchers.Main) {
+                if (artSource === art) {
+                    artUri = uri
+                    updateMediaSession(mediaTracker.state.value)
+                }
+            }
+        }
     }
 
     private fun applyDisplayTexts(
@@ -760,8 +827,8 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         applyDisplayTexts(metaBuilder, texts)
         lastSubtitleText = "${texts.first}\u0000${texts.second}"
 
-        mediaSession.setMetadata(metaBuilder.build())
-        mediaSession.setPlaybackState(buildPlaybackState(state))
+        pushMetadata(state, texts, metaBuilder, force = trackChanged)
+        pushPlaybackState(state, force = trackChanged)
     }
 
     private fun updateSubtitleKaraoke() {
@@ -776,8 +843,45 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
 
         val metaBuilder = buildBaseMetadata(state)
         applyDisplayTexts(metaBuilder, texts)
-        mediaSession.setMetadata(metaBuilder.build())
-        mediaSession.setPlaybackState(buildPlaybackState(state))
+        pushMetadata(state, texts, metaBuilder)
+    }
+
+    // --- Only tell Android Auto about real changes ---
+    // Every update can make Android Auto switch its media card to this app, so
+    // re-sending the same thing makes it fight the player's own card (flicker).
+
+    private var sentMetaKey: String? = null
+    private var sentPbState = -1
+    private var sentPbPosition = 0L
+    private var sentPbAt = 0L
+
+    private fun pushMetadata(
+        state: LyricsState,
+        texts: Pair<String, String>,
+        builder: MediaMetadataCompat.Builder,
+        force: Boolean = false
+    ) {
+        val t = state.track
+        val art = state.albumArt ?: lastAlbumArt
+        val key = "${t?.title}\u0000${t?.artist}\u0000${t?.album}\u0000${t?.durationMs}\u0000" +
+            "${texts.first}\u0000${texts.second}\u0000${artUri ?: art?.let { System.identityHashCode(it) }}"
+        if (!force && key == sentMetaKey) return
+        sentMetaKey = key
+        mediaSession.setMetadata(builder.build())
+    }
+
+    /** Sends the playback state only when playing/paused changed or the position drifted 2 s. */
+    private fun pushPlaybackState(state: LyricsState, force: Boolean = false) {
+        val pb = buildPlaybackState(state)
+        val now = android.os.SystemClock.elapsedRealtime()
+        val expected = if (sentPbState == PlaybackStateCompat.STATE_PLAYING) {
+            sentPbPosition + (now - sentPbAt)
+        } else sentPbPosition
+        if (!force && pb.state == sentPbState && kotlin.math.abs(pb.position - expected) < POSITION_DRIFT_MS) return
+        sentPbState = pb.state
+        sentPbPosition = pb.position
+        sentPbAt = now
+        mediaSession.setPlaybackState(pb)
     }
 
     private fun buildPlaybackState(state: LyricsState): PlaybackStateCompat {
@@ -789,8 +893,9 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             PlaybackStateCompat.STATE_NONE
         }
 
+        // The player's real position: AA's seek bar sends it back unchanged in onSeekTo.
         val position = try {
-            mediaTracker.getCurrentPositionMs()
+            mediaTracker.rawPositionMs().coerceAtLeast(0)
         } catch (_: Exception) {
             0L
         }
@@ -892,10 +997,13 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         displayedCurrentIdx = win.currentIdx
         displayedStatus = state.status
 
+        // Word-by-word changes alone refresh the list at most once a second: every
+        // refresh cross-fades the rows on Android Auto (ghosted text).
+        val gap = if (windowChanged || lineChanged || statusChanged) NOTIFY_THROTTLE_MS else KARAOKE_LIST_THROTTLE_MS
         val now = System.currentTimeMillis()
         val elapsed = now - lastNotifyTime
 
-        if (elapsed >= NOTIFY_THROTTLE_MS) {
+        if (elapsed >= gap) {
             lastNotifyTime = now
             notifyLyricsPages()
         } else if (!pendingNotify) {
@@ -904,13 +1012,15 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
                 pendingNotify = false
                 lastNotifyTime = System.currentTimeMillis()
                 notifyLyricsPages()
-            }, NOTIFY_THROTTLE_MS - elapsed)
+            }, gap - elapsed)
         }
     }
 
     // --- Transport controls ---
 
     private fun getActiveMediaController(): MediaController? {
+        // Control the same player whose lyrics are shown.
+        mediaTracker.controller?.let { return it }
         val sessionManager = getSystemService(MEDIA_SESSION_SERVICE)
             as? android.media.session.MediaSessionManager ?: return null
         return try {

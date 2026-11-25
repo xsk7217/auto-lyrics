@@ -40,11 +40,17 @@ class MediaListenerService : NotificationListenerService() {
         try {
             sessionManager.removeOnActiveSessionsChangedListener(sessionsListener)
         } catch (_: Exception) { }
+        // Without this, session tracking stays off until notification access is toggled.
+        try {
+            requestRebind(ComponentName(this, MediaListenerService::class.java))
+        } catch (_: Exception) { }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        // Only Pixel "Now Playing" results matter here; session changes come
+        // through the active-sessions listener (re-picking on every
+        // notification from every app was wasted work and could jump players).
         sbn?.let { RecognizedSongs.onNotification(this, it) }
-        updateSessions()
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {}
@@ -66,10 +72,14 @@ class MediaListenerService : NotificationListenerService() {
         }
 
         val playing = filtered.firstOrNull { controller ->
-            controller.playbackState?.state == PlaybackState.STATE_PLAYING
+            controller.playbackState?.state.let {
+                it == PlaybackState.STATE_PLAYING || it == PlaybackState.STATE_BUFFERING
+            }
         }
 
-        val best = playing ?: filtered.first()
+        // Nothing playing: stay with the player already followed.
+        val current = MediaTracker.getInstance(this).controller?.packageName
+        val best = playing ?: filtered.firstOrNull { it.packageName == current } ?: filtered.first()
         MediaTracker.getInstance(this).onMediaSessionChanged(best)
     }
 }

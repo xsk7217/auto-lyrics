@@ -78,6 +78,16 @@ class AuroraView(context: Context) : View(context) {
         animator.start()
     }
 
+    /** Off screen (activity stopped, covered): stop redrawing every frame. */
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        if (isVisible) {
+            if (animator.isPaused) animator.resume() else if (!animator.isStarted) animator.start()
+        } else if (animator.isRunning) {
+            animator.pause()
+        }
+    }
+
     override fun onDetachedFromWindow() {
         animator.cancel()
         super.onDetachedFromWindow()

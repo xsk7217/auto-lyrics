@@ -21,6 +21,11 @@ An Android Auto app that displays synced lyrics for the currently playing song, 
 - **v1.12.3**: messy-title fallback also splits "Artist- Song" (a space on one side of the dash is enough; "Anti-Hero" still stays whole) and drops " Ft. / feat. …" guest artists, e.g. "Maroon 5- Sugar (Remix) Ft. Nicki Minaj" → Sugar / Maroon 5.
 - **v1.12.4**: main-screen toolbar fills the width with fixed 8dp gaps; − / + are wider and as tall as 全螢幕歌詞.
 - **v1.12.5**: the − / + toolbar row is shorter: ⟳ and ⚙ shrink to 38dp, the same height as the other buttons.
+- **v1.13.0 — review fixes**:
+  - Lyrics matching: an unknown artist no longer accepts any song with the same title (duration must match); LRCLIB / SyncLRC results are checked too; empty metadata fields fall back to the next field and a late-arriving artist triggers a new search; prefetched lyrics are re-checked when played; cache keys use SHA-1 and store the song duration; same-name songs with different lengths get their own lyrics; lookups stop when cancelled; "換來源重抓" can no longer be overwritten by an older lookup.
+  - Lyrics text: Japanese is no longer converted to Traditional Chinese; karaoke Chinese lines have no spaces between characters; `[offset:]` tags are honoured; more timestamp formats accepted; "纯音乐" placeholders ignored.
+  - Android Auto: buffering no longer reported as paused (media-card flicker); metadata / playback state sent only on real changes; cover sent as a content:// URI; only Android Auto / system / Bluetooth may connect to the browser service; seek and progress no longer shifted by the lyric delay; seek / skip go to the followed player; karaoke-only list refreshes at most once a second; Morphe "MediaSession lyrics" detected by media id.
+  - Phone: Tap to Sync offset sign fixed; permission warning readable in light mode; plain-lyrics scrolling no longer jumps back; auto-scroll lands on the real line; animations pause off screen; full-screen page no longer keeps the previous song's line; chip rows scroll on small screens; notification listener asks to rebind after being dropped.
 - Sources other than LRCLIB use unofficial endpoints and may break at any time.
 
 ## Features

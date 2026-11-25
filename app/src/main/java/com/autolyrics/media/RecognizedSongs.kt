@@ -30,6 +30,7 @@ object RecognizedSongs {
     /** "Song by Artist" (English). Too generic, so only from Now Playing packages. */
     private val EN_PATTERN = Regex("""^(.+?)\s+by\s+(.+)$""")
 
+    @Volatile
     var listener: (() -> Unit)? = null
 
     fun onNotification(context: Context, sbn: StatusBarNotification) {

@@ -103,7 +103,15 @@ internal object LyricsResults {
         if (min > 99) m.value else "[%02d:%02d.%03d]".format(min, sec, ms)
     }
 
-    fun hasRealText(lines: List<LyricLine>) = lines.any { it.text != "♪" && it.text.isNotBlank() }
+    fun hasRealText(lines: List<LyricLine>) = lines.any { it.text != "♪" && it.text.isNotBlank() } && !isInstrumental(lines)
+
+    private val INSTRUMENTAL = Regex("纯音乐|純音樂|没有填词|沒有填詞|instrumental", RegexOption.IGNORE_CASE)
+
+    /** "纯音乐，请欣赏" and similar placeholders are not lyrics. */
+    private fun isInstrumental(lines: List<LyricLine>): Boolean {
+        val real = lines.filter { it.text != "♪" && it.text.isNotBlank() }
+        return real.size <= 3 && real.any { INSTRUMENTAL.containsMatchIn(it.text) }
+    }
 
     /** Synced if the text has timestamps, otherwise plain (or null when empty). */
     fun fromLrcOrPlain(text: String?, label: String): LyricsResult? {
@@ -119,7 +127,7 @@ internal object LyricsResults {
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.matches(Regex("""^\[[a-zA-Z]+:.*]$""")) }
             .map { LyricLine(0L, it) }
-        return if (lines.isNotEmpty()) LyricsResult(lines, LyricsStatus.PLAIN_ONLY, "$label · Plain") else null
+        return if (lines.isNotEmpty() && hasRealText(lines)) LyricsResult(lines, LyricsStatus.PLAIN_ONLY, "$label · Plain") else null
     }
 }
 
@@ -160,7 +168,9 @@ internal object TrackMatcher {
     }
 
     private fun artistOk(trackArtist: String, candArtists: List<String>): Boolean {
-        if (trackArtist.isBlank()) return true
+        // Unknown artist proves nothing: the duration must then agree (see rank),
+        // otherwise any song with the same title ("glass") would be accepted.
+        if (trackArtist.isBlank()) return false
         val wanted = trackArtist.split(ARTIST_SPLIT).map { norm(it) }.filter { it.isNotEmpty() }
         val whole = norm(trackArtist)
         val have = candArtists.flatMap { it.split(ARTIST_SPLIT) }.map { norm(it) }.filter { it.isNotEmpty() }

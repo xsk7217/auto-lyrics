@@ -53,12 +53,18 @@ object LyricsProviders {
      * When nothing at all is found, retries with cleaned-up / split titles
      * (uploaded videos like "歌手 - 歌名『歌詞』").
      */
-    fun fetch(prefs: SharedPreferences, track: TrackInfo, exclude: Set<String> = emptySet()): LyricsResult? {
+    fun fetch(
+        prefs: SharedPreferences,
+        track: TrackInfo,
+        exclude: Set<String> = emptySet(),
+        isActive: () -> Boolean = { true }
+    ): LyricsResult? {
         val entries = load(prefs).filter { it.provider.id !in exclude }
-        fetchOnce(entries, track)?.let { return it }
+        fetchOnce(entries, track, isActive)?.let { return it }
         var plain: LyricsResult? = null
         for (variant in TitleVariants.of(track)) {
-            val result = fetchOnce(entries, variant) ?: continue
+            if (!isActive()) return null
+            val result = fetchOnce(entries, variant, isActive) ?: continue
             if (result.status == LyricsStatus.FOUND) return result
             if (plain == null) plain = result
         }
@@ -71,10 +77,12 @@ object LyricsProviders {
 
     fun displayName(id: String): String = all.firstOrNull { it.id == id }?.displayName ?: id
 
-    private fun fetchOnce(entries: List<Entry>, track: TrackInfo): LyricsResult? {
+    /** [isActive] is checked between sources: a cancelled lookup stops early. */
+    private fun fetchOnce(entries: List<Entry>, track: TrackInfo, isActive: () -> Boolean): LyricsResult? {
         var plain: LyricsResult? = null
         for (entry in entries) {
             if (!entry.enabled) continue
+            if (!isActive()) return null
             val result = try {
                 entry.provider.fetch(track)
             } catch (e: Exception) {
