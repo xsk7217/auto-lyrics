@@ -203,6 +203,10 @@ class MediaTracker private constructor(context: Context) {
             return
         }
 
+        // Another player: nothing pending from the old one may carry over.
+        handler.removeCallbacks(trackChangeRunnable)
+        trackChangePending = false
+        currentMediaId = null
         controller.registerCallback(mediaCallback)
         handleMetadataChanged(controller.metadata)
         handlePlaybackStateChanged(controller.playbackState)

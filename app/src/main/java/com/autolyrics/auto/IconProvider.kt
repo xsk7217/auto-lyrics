@@ -38,7 +38,9 @@ class IconProvider : ContentProvider() {
          * whole bitmap with every metadata update.
          */
         @Synchronized
-        fun saveArt(context: Context, art: Bitmap): String? = try {
+        fun saveArt(context: Context, source: Bitmap): String? = try {
+            // Hardware bitmaps cannot be scaled or compressed: copy them to memory first.
+            val art = if (source.config == Bitmap.Config.HARDWARE) source.copy(Bitmap.Config.ARGB_8888, false) else source
             val dir = File(context.cacheDir, "aa_art").apply { mkdirs() }
             val scale = ART_MAX_PX.toFloat() / maxOf(art.width, art.height)
             val small = if (scale < 1f) {

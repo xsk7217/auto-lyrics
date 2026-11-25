@@ -170,8 +170,10 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
 
         scope.launch {
             mediaTracker.state.collectLatest { state ->
-                updateMediaSession(state)
-                throttledNotifyChildren(state)
+                // A failure while building one update (odd cover art, a dead
+                // session…) must not end this collector for good.
+                try { updateMediaSession(state) } catch (e: Exception) { if (e is CancellationException) throw e }
+                try { throttledNotifyChildren(state) } catch (e: Exception) { if (e is CancellationException) throw e }
             }
         }
 
@@ -786,9 +788,15 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         artSmall = null
         if (art == null) return
         val scale = 320f / maxOf(art.width, art.height)
-        artSmall = if (scale < 1f) {
-            Bitmap.createScaledBitmap(art, (art.width * scale).toInt().coerceAtLeast(1), (art.height * scale).toInt().coerceAtLeast(1), true)
-        } else art
+        artSmall = try {
+            if (scale < 1f) {
+                // Some players hand over hardware bitmaps; copy them first.
+                val soft = if (art.config == Bitmap.Config.HARDWARE) art.copy(Bitmap.Config.ARGB_8888, false) else art
+                Bitmap.createScaledBitmap(soft, (soft.width * scale).toInt().coerceAtLeast(1), (soft.height * scale).toInt().coerceAtLeast(1), true)
+            } else art
+        } catch (_: Exception) {
+            null
+        }
         scope.launch(Dispatchers.IO) {
             val uri = IconProvider.saveArt(this@LyricsBrowserService, art) ?: return@launch
             withContext(Dispatchers.Main) {

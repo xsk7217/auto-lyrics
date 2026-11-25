@@ -11,8 +11,8 @@ android {
         applicationId = "com.autolyrics"
         minSdk = 26
         targetSdk = 34
-        versionCode = 46
-        versionName = "1.13.0"
+        versionCode = 47
+        versionName = "1.13.1"
     }
 
     signingConfigs {

@@ -13,8 +13,55 @@ class MediaListenerService : NotificationListenerService() {
 
     private val sessionsListener =
         MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
+            watchSessions(controllers)
             pickBestSession(controllers)
         }
+
+    /**
+     * Android only reports when the *list* of players changes. Pausing one
+     * player and starting another leaves the list as it is, so every player is
+     * watched here: a player that starts or stops playing re-picks the one
+     * to follow (Spotify, YT Music, Apple Music… all alike).
+     */
+    private class Watch(val controller: MediaController, val callback: MediaController.Callback, var playing: Boolean)
+
+    private val watches = mutableMapOf<android.media.session.MediaSession.Token, Watch>()
+
+    private fun isPlaying(state: PlaybackState?) =
+        state?.state == PlaybackState.STATE_PLAYING || state?.state == PlaybackState.STATE_BUFFERING
+
+    private fun watchSessions(controllers: List<MediaController>?) {
+        val current = controllers.orEmpty().filter { it.packageName != packageName }
+        val tokens = current.map { it.sessionToken }.toSet()
+        // Stop watching players that are gone.
+        watches.keys.filter { it !in tokens }.forEach { token ->
+            watches.remove(token)?.let { w ->
+                try { w.controller.unregisterCallback(w.callback) } catch (_: Exception) { }
+            }
+        }
+        // Start watching new ones.
+        for (controller in current) {
+            if (controller.sessionToken in watches) continue
+            lateinit var watch: Watch
+            val callback = object : MediaController.Callback() {
+                override fun onPlaybackStateChanged(state: PlaybackState?) {
+                    val nowPlaying = isPlaying(state)
+                    // Only a start / stop matters; position updates are ignored.
+                    if (nowPlaying != watch.playing) {
+                        watch.playing = nowPlaying
+                        updateSessions()
+                    }
+                }
+
+                override fun onSessionDestroyed() = updateSessions()
+            }
+            watch = Watch(controller, callback, isPlaying(controller.playbackState))
+            try {
+                controller.registerCallback(callback)
+                watches[controller.sessionToken] = watch
+            } catch (_: Exception) { }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -40,6 +87,8 @@ class MediaListenerService : NotificationListenerService() {
         try {
             sessionManager.removeOnActiveSessionsChangedListener(sessionsListener)
         } catch (_: Exception) { }
+        watches.values.forEach { try { it.controller.unregisterCallback(it.callback) } catch (_: Exception) { } }
+        watches.clear()
         // Without this, session tracking stays off until notification access is toggled.
         try {
             requestRebind(ComponentName(this, MediaListenerService::class.java))
@@ -63,6 +112,7 @@ class MediaListenerService : NotificationListenerService() {
             val controllers = sessionManager.getActiveSessions(
                 ComponentName(this, MediaListenerService::class.java)
             )
+            watchSessions(controllers)
             pickBestSession(controllers)
         } catch (_: SecurityException) { }
     }
@@ -74,11 +124,7 @@ class MediaListenerService : NotificationListenerService() {
             return
         }
 
-        val playing = filtered.firstOrNull { controller ->
-            controller.playbackState?.state.let {
-                it == PlaybackState.STATE_PLAYING || it == PlaybackState.STATE_BUFFERING
-            }
-        }
+        val playing = filtered.firstOrNull { isPlaying(it.playbackState) }
 
         // Nothing playing: stay with the player already followed.
         val current = MediaTracker.getInstance(this).controller?.packageName
