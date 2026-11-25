@@ -155,11 +155,12 @@ internal object TrackMatcher {
         return base.ifBlank { NOISE.replace(simplified, "") }
     }
 
-    private fun titleOk(trackTitle: String, candTitle: String): Boolean {
+    private fun titleOk(trackTitle: String, candTitle: String, exact: Boolean = false): Boolean {
         val a = norm(trackTitle)
         val b = norm(candTitle)
         if (a.isEmpty() || b.isEmpty()) return false
         if (a == b) return true
+        if (exact) return false
         // Allow small extras ("太陽與地球" vs "太陽與地球 鋼琴版") but not a different,
         // shorter song name ("太陽" vs "太陽與地球").
         val shorter = minOf(a.length, b.length)
@@ -168,8 +169,7 @@ internal object TrackMatcher {
     }
 
     private fun artistOk(trackArtist: String, candArtists: List<String>): Boolean {
-        // Unknown artist proves nothing: the duration must then agree (see rank),
-        // otherwise any song with the same title ("glass") would be accepted.
+        // Unknown artist proves nothing (see rank for what is required instead).
         if (trackArtist.isBlank()) return false
         val wanted = trackArtist.split(ARTIST_SPLIT).map { norm(it) }.filter { it.isNotEmpty() }
         val whole = norm(trackArtist)
@@ -178,16 +178,23 @@ internal object TrackMatcher {
         return have.any { h -> wanted.any { w -> w == h || w.contains(h) || h.contains(w) } || whole.contains(h) }
     }
 
-    /** Returns acceptable candidates, best first. */
+    /**
+     * Returns acceptable candidates, best first.
+     *
+     * Song length never rules a candidate out: YouTube Music often plays the
+     * MV / live / extended version, which is longer than the audio the lyrics
+     * belong to. A close length only helps: it can stand in for an artist
+     * written differently ("周杰倫" vs "Jay Chou"), and closer ranks first.
+     * With no artist known at all, the title must match exactly.
+     */
     fun <T> rank(track: TrackInfo, candidates: List<Candidate<T>>): List<Candidate<T>> {
+        val noArtist = track.artist.isBlank()
         val scored: List<Triple<Candidate<T>, Boolean, Long>> = candidates.mapNotNull { c ->
-            if (!titleOk(track.title, c.title)) return@mapNotNull null
+            if (!titleOk(track.title, c.title, exact = noArtist)) return@mapNotNull null
             val bothKnown = track.durationMs > 0 && c.durationMs > 0
-            val diff = if (bothKnown) abs(track.durationMs - c.durationMs) else 0L
-            if (bothKnown && diff > 6_000) return@mapNotNull null
+            val diff = if (bothKnown) abs(track.durationMs - c.durationMs) else Long.MAX_VALUE / 2
             val artist = artistOk(track.artist, c.artists)
-            // Without an artist match, only accept when the duration agrees closely.
-            if (!artist && !(bothKnown && diff <= 2_000)) return@mapNotNull null
+            if (!artist && !noArtist && !(bothKnown && diff <= 2_000)) return@mapNotNull null
             Triple(c, artist, diff)
         }
         return scored

@@ -10,8 +10,7 @@ import java.security.MessageDigest
 
 /**
  * Lyrics stored on disk per (title, artist). Files are named by a SHA-1 of the
- * key, and the key and song duration are stored inside, so a different song
- * never gets another song's lyrics.
+ * key and the key is stored inside, so two keys never share a file.
  */
 class LyricsCache(context: Context) {
 
@@ -30,8 +29,8 @@ class LyricsCache(context: Context) {
         val status: String,
         val source: String,
         val timestamp: Long,
-        /** Duration of the song the lyrics were checked against; 0 = not checked. */
-        val durationMs: Long = 0L
+        /** False for prefetched lyrics: not yet confirmed while the song played. */
+        val checked: Boolean = true
     )
 
     data class CachedLine(
@@ -50,11 +49,10 @@ class LyricsCache(context: Context) {
         val status: LyricsStatus,
         val source: String,
         val ageMs: Long,
-        val durationMs: Long
+        val checked: Boolean
     )
 
-    /** Returns null when nothing is stored or the stored song has another duration. */
-    fun get(title: String, artist: String, durationMs: Long = 0L): Entry? {
+    fun get(title: String, artist: String): Entry? {
         val key = key(title, artist)
         val file = cacheFile(key)
         if (!file.exists()) return null
@@ -62,9 +60,6 @@ class LyricsCache(context: Context) {
         return try {
             val cached = gson.fromJson(file.readText(), CachedResult::class.java)
             if (cached.key != key) return null
-            if (durationMs > 0 && cached.durationMs > 0 &&
-                kotlin.math.abs(durationMs - cached.durationMs) > DURATION_TOLERANCE_MS
-            ) return null
             val status = try {
                 LyricsStatus.valueOf(cached.status)
             } catch (_: Exception) {
@@ -77,7 +72,7 @@ class LyricsCache(context: Context) {
                     words = cl.words.map { cw -> LyricWord(cw.timeMs, cw.text) }
                 )
             }
-            Entry(lines, status, cached.source, System.currentTimeMillis() - cached.timestamp, cached.durationMs)
+            Entry(lines, status, cached.source, System.currentTimeMillis() - cached.timestamp, cached.checked)
         } catch (_: Exception) {
             file.delete()
             null
@@ -90,7 +85,7 @@ class LyricsCache(context: Context) {
         lines: List<LyricLine>,
         status: LyricsStatus,
         source: String,
-        durationMs: Long = 0L
+        checked: Boolean = true
     ) {
         try {
             val key = key(title, artist)
@@ -106,7 +101,7 @@ class LyricsCache(context: Context) {
                 status = status.name,
                 source = source,
                 timestamp = System.currentTimeMillis(),
-                durationMs = durationMs
+                checked = checked
             )
             cacheFile(key).writeText(gson.toJson(cached))
         } catch (_: Exception) {
@@ -127,9 +122,5 @@ class LyricsCache(context: Context) {
     private fun cacheFile(key: String): File {
         val digest = MessageDigest.getInstance("SHA-1").digest(key.toByteArray(Charsets.UTF_8))
         return File(cacheDir, digest.joinToString("") { "%02x".format(it) } + ".json")
-    }
-
-    companion object {
-        private const val DURATION_TOLERANCE_MS = 3_000L
     }
 }

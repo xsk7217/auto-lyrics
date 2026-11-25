@@ -381,7 +381,7 @@ class MediaTracker private constructor(context: Context) {
         fetchJob?.cancel()
         fetchJob = scope.launch(Dispatchers.IO) {
             try {
-                val cached = lyricsCache.get(track.title, track.artist, track.durationMs)
+                val cached = lyricsCache.get(track.title, track.artist)
                 if (cached != null) {
                     val status = cached.status
                     val source = cached.source
@@ -401,10 +401,9 @@ class MediaTracker private constructor(context: Context) {
                         translateIfNeeded(lines, track)
                     }
 
-                    // Prefetched entries were never checked against this song's
-                    // duration: show them, but look them up again.
-                    val verified = cached.durationMs > 0 || track.durationMs <= 0
-                    if (verified && cached.ageMs < CACHE_REFRESH_MS) {
+                    // Prefetched entries were looked up with less information:
+                    // show them, but look the song up again now it plays.
+                    if (cached.checked && cached.ageMs < CACHE_REFRESH_MS) {
                         prefetchNextSong()
                         return@launch
                     }
@@ -413,7 +412,7 @@ class MediaTracker private constructor(context: Context) {
                 val result = fetchFromProviders(track)
                 val displayLines = result?.let { finalizeLines(it.lines) }
                 if (result != null) {
-                    lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source, track.durationMs)
+                    lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source)
                 }
 
                 withContext(Dispatchers.Main) {
@@ -486,7 +485,7 @@ class MediaTracker private constructor(context: Context) {
                     val nextTrack = TrackInfo(title, artist, "", 0)
                     val result = fetchFromProviders(nextTrack)
                     if (result != null) {
-                        lyricsCache.put(title, artist, result.lines, result.status, result.source)
+                        lyricsCache.put(title, artist, result.lines, result.status, result.source, checked = false)
                     }
                     return@launch
                 }
@@ -552,7 +551,7 @@ class MediaTracker private constructor(context: Context) {
             }
             val displayLines = result?.let { finalizeLines(it.lines) }
             if (result != null) {
-                lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source, track.durationMs)
+                lyricsCache.put(track.title, track.artist, result.lines, result.status, result.source)
             }
 
             withContext(Dispatchers.Main) {

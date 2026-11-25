@@ -49,9 +49,10 @@ object LrcLibClient {
         }
 
         // Priority 2: search for synced lyrics (duration-guarded)
-        val searchResults = searchAll(trackName, artistName)
+        // Closest length first, but a different length (MV / live version) is no reason to skip.
+        val searchResults = searchAll(trackName, artistName).sortedBy { durationGap(it, durationSec) }
         val syncedResult = searchResults.firstOrNull {
-            it.syncedLyrics != null && withinDuration(it, durationSec) && accept(it)
+            it.syncedLyrics != null && accept(it)
         }
         if (syncedResult != null) return syncedResult
 
@@ -69,17 +70,17 @@ object LrcLibClient {
 
         // Priority 5: search result with plain lyrics (duration-guarded)
         val plainResult = searchResults.firstOrNull {
-            it.plainLyrics != null && withinDuration(it, durationSec) && accept(it)
+            it.plainLyrics != null && accept(it)
         }
         if (plainResult != null) return plainResult
 
         return null
     }
 
-    private fun withinDuration(result: LrcLibResponse, durationSec: Int): Boolean {
-        val d = result.duration ?: return true
-        if (durationSec <= 0) return true
-        return kotlin.math.abs(d - durationSec) <= 10
+    private fun durationGap(result: LrcLibResponse, durationSec: Int): Double {
+        val d = result.duration ?: return Double.MAX_VALUE
+        if (durationSec <= 0) return 0.0
+        return kotlin.math.abs(d - durationSec)
     }
 
     private fun getExact(
